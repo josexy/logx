@@ -130,6 +130,7 @@ func (l *LoggerX) Error(format string, args ...any) {
 
 func (l *LoggerX) Fatal(format string, args ...any) {
 	if atomic.LoadInt32(&l.isDiscard) != 0 {
+		os.Exit(1)
 		return
 	}
 	l.output(LevelFatal, fmt.Sprintf(format, args...))
@@ -241,6 +242,7 @@ func ErrorBy(err error) {
 
 func Fatal(format string, args ...any) {
 	if atomic.LoadInt32(&stdLoggerX.isDiscard) != 0 {
+		os.Exit(1)
 		return
 	}
 	stdLoggerX.output(LevelFatal, fmt.Sprintf(format, args...))
@@ -249,9 +251,11 @@ func Fatal(format string, args ...any) {
 
 func FatalBy(err error) {
 	if err == nil {
+		os.Exit(1)
 		return
 	}
 	if atomic.LoadInt32(&stdLoggerX.isDiscard) != 0 {
+		os.Exit(1)
 		return
 	}
 	stdLoggerX.output(LevelError, err.Error())
