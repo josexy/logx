@@ -18,60 +18,66 @@ const (
 )
 
 var (
-	colorHighMap = map[color.Attribute]*color.Color{
-		color.FgHiGreen:  color.New(color.FgHiGreen, color.Bold),
-		color.FgHiYellow: color.New(color.FgHiYellow, color.Bold),
-		color.FgHiBlue:   color.New(color.FgHiBlue, color.Bold),
-		color.FgHiRed:    color.New(color.FgHiRed, color.Bold),
-		color.FgHiCyan:   color.New(color.FgHiCyan, color.Bold),
-		color.FgHiWhite:  color.New(color.FgHiWhite, color.Bold),
+	colorMap = map[uint8]*color.Color{
+		GreenAttr:    color.New(color.FgGreen),
+		YellowAttr:   color.New(color.FgYellow),
+		BlueAttr:     color.New(color.FgBlue),
+		RedAttr:      color.New(color.FgRed),
+		CyanAttr:     color.New(color.FgCyan),
+		WhiteAttr:    color.New(color.FgWhite),
+		HiGreenAttr:  color.New(color.FgHiGreen, color.Bold),
+		HiYellowAttr: color.New(color.FgHiYellow, color.Bold),
+		HiBlueAttr:   color.New(color.FgHiBlue, color.Bold),
+		HiRedAttr:    color.New(color.FgHiRed, color.Bold),
+		HiCyanAttr:   color.New(color.FgHiCyan, color.Bold),
+		HiWhiteAttr:  color.New(color.FgHiWhite, color.Bold),
 	}
 )
 
-func Green(format string, a ...interface{}) string {
-	return color.GreenString(format, a...)
+func Green(msg string) string {
+	return colorMap[GreenAttr].Sprint(msg)
 }
 
-func Yellow(format string, a ...interface{}) string {
-	return color.YellowString(format, a...)
+func Yellow(msg string) string {
+	return colorMap[YellowAttr].Sprint(msg)
 }
 
-func Blue(format string, a ...interface{}) string {
-	return color.BlueString(format, a...)
+func Blue(msg string) string {
+	return colorMap[BlueAttr].Sprint(msg)
 }
 
-func Red(format string, a ...interface{}) string {
-	return color.RedString(format, a...)
+func Red(msg string) string {
+	return colorMap[RedAttr].Sprint(msg)
 }
 
-func Cyan(format string, a ...interface{}) string {
-	return color.CyanString(format, a...)
+func Cyan(msg string) string {
+	return colorMap[CyanAttr].Sprint(msg)
 }
 
-func White(format string, a ...interface{}) string {
-	return color.WhiteString(format, a...)
+func White(msg string) string {
+	return colorMap[WhiteAttr].Sprint(msg)
 }
 
-func HiGreen(format string, a ...interface{}) string {
-	return colorHighMap[color.FgHiGreen].Sprintf(format, a...)
+func HiGreen(msg string) string {
+	return colorMap[HiGreenAttr].Sprint(msg)
 }
 
-func HiYellow(format string, a ...interface{}) string {
-	return colorHighMap[color.FgHiYellow].Sprintf(format, a...)
+func HiYellow(msg string) string {
+	return colorMap[HiYellowAttr].Sprint(msg)
 }
 
-func HiBlue(format string, a ...interface{}) string {
-	return colorHighMap[color.FgHiBlue].Sprintf(format, a...)
+func HiBlue(msg string) string {
+	return colorMap[HiBlueAttr].Sprint(msg)
 }
 
-func HiRed(format string, a ...interface{}) string {
-	return colorHighMap[color.FgHiRed].Sprintf(format, a...)
+func HiRed(msg string) string {
+	return colorMap[HiRedAttr].Sprint(msg)
 }
 
-func HiCyan(format string, a ...interface{}) string {
-	return colorHighMap[color.FgHiCyan].Sprintf(format, a...)
+func HiCyan(msg string) string {
+	return colorMap[HiCyanAttr].Sprint(msg)
 }
 
-func HiWhite(format string, a ...interface{}) string {
-	return colorHighMap[color.FgHiWhite].Sprintf(format, a...)
+func HiWhite(msg string) string {
+	return colorMap[HiWhiteAttr].Sprint(msg)
 }
