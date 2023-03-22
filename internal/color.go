@@ -8,29 +8,33 @@ const (
 	BlueAttr
 	RedAttr
 	CyanAttr
+	MagentaAttr
 	WhiteAttr
 	HiGreenAttr
 	HiYellowAttr
 	HiBlueAttr
 	HiRedAttr
 	HiCyanAttr
+	HiMagentaAttr
 	HiWhiteAttr
 )
 
 var (
 	colorMap = map[uint8]*color.Color{
-		GreenAttr:    color.New(color.FgGreen),
-		YellowAttr:   color.New(color.FgYellow),
-		BlueAttr:     color.New(color.FgBlue),
-		RedAttr:      color.New(color.FgRed),
-		CyanAttr:     color.New(color.FgCyan),
-		WhiteAttr:    color.New(color.FgWhite),
-		HiGreenAttr:  color.New(color.FgHiGreen, color.Bold),
-		HiYellowAttr: color.New(color.FgHiYellow, color.Bold),
-		HiBlueAttr:   color.New(color.FgHiBlue, color.Bold),
-		HiRedAttr:    color.New(color.FgHiRed, color.Bold),
-		HiCyanAttr:   color.New(color.FgHiCyan, color.Bold),
-		HiWhiteAttr:  color.New(color.FgHiWhite, color.Bold),
+		GreenAttr:     color.New(color.FgGreen),
+		YellowAttr:    color.New(color.FgYellow),
+		BlueAttr:      color.New(color.FgBlue),
+		RedAttr:       color.New(color.FgRed),
+		CyanAttr:      color.New(color.FgCyan),
+		MagentaAttr:   color.New(color.FgMagenta),
+		WhiteAttr:     color.New(color.FgWhite),
+		HiGreenAttr:   color.New(color.FgHiGreen, color.Bold),
+		HiYellowAttr:  color.New(color.FgHiYellow, color.Bold),
+		HiBlueAttr:    color.New(color.FgHiBlue, color.Bold),
+		HiRedAttr:     color.New(color.FgHiRed, color.Bold),
+		HiCyanAttr:    color.New(color.FgHiCyan, color.Bold),
+		HiMagentaAttr: color.New(color.FgHiMagenta, color.Bold),
+		HiWhiteAttr:   color.New(color.FgHiWhite, color.Bold),
 	}
 )
 
@@ -52,6 +56,10 @@ func Red(msg string) string {
 
 func Cyan(msg string) string {
 	return colorMap[CyanAttr].Sprint(msg)
+}
+
+func Magenta(msg string) string {
+	return colorMap[MagentaAttr].Sprint(msg)
 }
 
 func White(msg string) string {
@@ -76,6 +84,10 @@ func HiRed(msg string) string {
 
 func HiCyan(msg string) string {
 	return colorMap[HiCyanAttr].Sprint(msg)
+}
+
+func HiMagenta(msg string) string {
+	return colorMap[HiMagentaAttr].Sprint(msg)
 }
 
 func HiWhite(msg string) string {
