@@ -148,6 +148,8 @@ func (enc *JsonEncoder) writeKeyValue2(arg *Arg) {
 		enc.writeTime(arg.inner.Time)
 	case DurationArg:
 		enc.writeDuration(arg.inner.Duration)
+	case ErrorArg:
+		enc.writeError(arg.inner.error)
 	}
 	enc.writeSplitComma()
 }
@@ -269,4 +271,12 @@ func (enc *JsonEncoder) writeTime(value time.Time) {
 
 func (enc *JsonEncoder) writeDuration(value time.Duration) {
 	enc.writeString(value.String(), true)
+}
+
+func (enc *JsonEncoder) writeError(value error) {
+	if value == nil {
+		enc.writeString("<nil>", true)
+	} else {
+		enc.writeString(value.Error(), true)
+	}
 }

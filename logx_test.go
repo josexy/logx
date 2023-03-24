@@ -54,6 +54,7 @@ func TestJsonLogger(t *testing.T) {
 		Float64("float64", 1234.4567),
 		Time("ts", time.Now().Add(time.Duration(time.Hour))),
 		Duration("duration", time.Duration(time.Hour+30*time.Minute+40*time.Second)),
+		Error("err", errors.New("error message")),
 	)
 	logger.Info("")
 	logger.Info("this is an info message")

@@ -21,6 +21,7 @@ const (
 	Float64Arg
 	TimeArg
 	DurationArg
+	ErrorArg
 )
 
 type innerArg struct {
@@ -40,6 +41,7 @@ type innerArg struct {
 	float64
 	time.Time
 	time.Duration
+	error
 }
 
 type Arg struct {
@@ -173,5 +175,13 @@ func Duration(key string, value time.Duration) Arg {
 		key:   key,
 		typ:   DurationArg,
 		inner: innerArg{Duration: value},
+	}
+}
+
+func Error(key string, value error) Arg {
+	return Arg{
+		key:   key,
+		typ:   ErrorArg,
+		inner: innerArg{error: value},
 	}
 }

@@ -24,3 +24,4 @@ func Float32(key string, value float32) Arg        { return internal.Float32(key
 func Float64(key string, value float64) Arg        { return internal.Float64(key, value) }
 func Time(key string, value time.Time) Arg         { return internal.Time(key, value) }
 func Duration(key string, value time.Duration) Arg { return internal.Duration(key, value) }
+func Error(key string, value error) Arg            { return internal.Error(key, value) }
