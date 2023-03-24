@@ -1,7 +1,7 @@
 ## simple and colorful golang logger
 
 ```shell
-go get github.com/josexy/logx
+go get -u github.com/josexy/logx
 ```
 
 ## usage
