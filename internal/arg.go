@@ -1,8 +1,12 @@
 package internal
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 type ArgType uint8
+type M map[string]any
 
 const (
 	StringArg ArgType = iota
@@ -22,6 +26,9 @@ const (
 	TimeArg
 	DurationArg
 	ErrorArg
+	MapArg
+	SliceArg
+	NilArg
 )
 
 type innerArg struct {
@@ -42,12 +49,35 @@ type innerArg struct {
 	time.Time
 	time.Duration
 	error
+	M
+	L []any
 }
+
+var errEoc = errors.New("end of consumer")
 
 type Arg struct {
 	key   string
 	typ   ArgType
 	inner innerArg
+}
+
+type argsConsumer struct {
+	index int
+	args  []Arg
+}
+
+func (l *argsConsumer) hasNext() bool {
+	return l.index < len(l.args)
+}
+
+func (l *argsConsumer) getNext() (arg Arg, err error) {
+	if l.index >= len(l.args) {
+		err = errEoc
+		return
+	}
+	arg = l.args[l.index]
+	l.index++
+	return
 }
 
 func String(key string, value string) Arg {
@@ -183,5 +213,21 @@ func Error(key string, value error) Arg {
 		key:   key,
 		typ:   ErrorArg,
 		inner: innerArg{error: value},
+	}
+}
+
+func Map(key string, value M) Arg {
+	return Arg{
+		key:   key,
+		typ:   MapArg,
+		inner: innerArg{M: value},
+	}
+}
+
+func Slice(key string, value []any) Arg {
+	return Arg{
+		key:   key,
+		typ:   SliceArg,
+		inner: innerArg{L: value},
 	}
 }

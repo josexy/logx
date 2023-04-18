@@ -7,6 +7,7 @@ import (
 )
 
 type Arg = internal.Arg
+type M = internal.M
 
 func String(key string, value string) Arg          { return internal.String(key, value) }
 func Bool(key string, value bool) Arg              { return internal.Bool(key, value) }
@@ -25,3 +26,5 @@ func Float64(key string, value float64) Arg        { return internal.Float64(key
 func Time(key string, value time.Time) Arg         { return internal.Time(key, value) }
 func Duration(key string, value time.Duration) Arg { return internal.Duration(key, value) }
 func Error(key string, value error) Arg            { return internal.Error(key, value) }
+func Map(key string, value M) Arg                  { return internal.Map(key, value) }
+func Slice(key string, value []any) Arg            { return internal.Slice(key, value) }
