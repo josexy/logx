@@ -5,4 +5,5 @@ type Config struct {
 	TimeItem
 	CallerItem
 	Encoder
+	EscapeQuote bool
 }

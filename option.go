@@ -47,6 +47,12 @@ func WithCaller(enable, fileName, funcName, lineNumber bool) ConfigOption {
 	})
 }
 
+func WithEscapeQuote(enable bool) ConfigOption {
+	return configOptionFn(func(c *internal.Config) {
+		c.EscapeQuote = enable
+	})
+}
+
 func WithJsonEncoder() ConfigOption {
 	return configOptionFn(func(c *internal.Config) {
 		c.Encoder = &internal.JsonEncoder{Config: c}
