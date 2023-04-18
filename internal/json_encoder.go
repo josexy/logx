@@ -2,8 +2,10 @@ package internal
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 	"time"
+	"unsafe"
 
 	"github.com/fatih/color"
 )
@@ -19,9 +21,8 @@ type colorWrapper struct {
 type JsonEncoder struct {
 	colorWrapper
 	*Config
-	buf       *bytes.Buffer
-	numArgs   int
-	totalArgs int
+	buf      *bytes.Buffer
+	consumer *argsConsumer
 }
 
 func (enc *JsonEncoder) Init() {
@@ -39,44 +40,32 @@ func (enc *JsonEncoder) Init() {
 	}
 }
 
-func (enc *JsonEncoder) calcPrefixCount() (count int) {
-	if enc.LevelItem.Enable {
-		count++
-	}
-	if enc.TimeItem.Enable {
-		count++
-	}
-	if enc.CallerItem.Enable {
-		count++
-	}
-	return
-}
-
 func (enc *JsonEncoder) Encode(w *bytes.Buffer, msg string, args ...Arg) error {
 	enc.buf = w
-	enc.numArgs = 0
-	enc.totalArgs = enc.calcPrefixCount() + 1 + len(args)
+	enc.consumer = &argsConsumer{args: args}
+	enc.buf.Reset()
 
-	enc.begin()
+	enc.beginObject()
 	enc.writePrefix()
 	enc.writeMsg(msg)
-	for i := 0; i < len(args); i++ {
-		enc.writeKeyValue2(&args[i])
+	enc.writeSplitComma(enc.consumer)
+	for enc.consumer.hasNext() {
+		enc.writeKeyValue2(enc.consumer)
 	}
-	enc.end()
+	enc.endObject()
 	return nil
 }
 
-func (enc *JsonEncoder) begin() {
-	enc.buf.Reset()
-	enc.buf.WriteByte('{')
-}
+func (enc *JsonEncoder) beginObject() { enc.buf.WriteByte('{') }
 
-func (enc *JsonEncoder) end() {
-	enc.buf.WriteByte('}')
-}
+func (enc *JsonEncoder) endObject() { enc.buf.WriteByte('}') }
+
+func (enc *JsonEncoder) beginArray() { enc.buf.WriteByte('[') }
+
+func (enc *JsonEncoder) endArray() { enc.buf.WriteByte(']') }
 
 func (enc *JsonEncoder) writePrefix() {
+	enc.consumer.index = -1
 	if enc.LevelItem.Enable {
 		enc.writeKeyValue1("level", enc.LevelItem.String())
 	}
@@ -86,21 +75,19 @@ func (enc *JsonEncoder) writePrefix() {
 	if enc.CallerItem.Enable {
 		enc.writeKeyValue1("caller", enc.CallerItem.String())
 	}
+	enc.consumer.index = 0
 }
 
 func (enc *JsonEncoder) writeMsg(msg string) {
 	enc.writeKey("msg", true)
 	enc.buf.WriteByte(':')
 	enc.writeString(msg, true)
-	enc.writeSplitComma()
 }
 
-func (enc *JsonEncoder) writeSplitComma() {
-	if enc.numArgs+1 == enc.totalArgs {
-		return
+func (enc *JsonEncoder) writeSplitComma(consumer *argsConsumer) {
+	if consumer.index != len(consumer.args) {
+		enc.buf.WriteByte(',')
 	}
-	enc.buf.WriteByte(',')
-	enc.numArgs++
 }
 
 func (enc *JsonEncoder) writeKeyValue1(key, value string) {
@@ -108,13 +95,17 @@ func (enc *JsonEncoder) writeKeyValue1(key, value string) {
 	enc.writeKey(key, true)
 	enc.buf.WriteByte(':')
 	enc.writeString(value, false)
-	enc.writeSplitComma()
+	enc.writeSplitComma(enc.consumer)
 }
 
-func (enc *JsonEncoder) writeKeyValue2(arg *Arg) {
-	// "key": VALUE
-	enc.writeKey(arg.key, true)
-	enc.buf.WriteByte(':')
+func (enc *JsonEncoder) wrapKey(key string) string {
+	if enc.keyColor != nil {
+		return enc.keyColor.Sprint(key)
+	}
+	return key
+}
+
+func (enc *JsonEncoder) writeValue(arg *Arg) {
 	switch arg.typ {
 	case StringArg:
 		enc.writeString(arg.inner.string, true)
@@ -150,15 +141,25 @@ func (enc *JsonEncoder) writeKeyValue2(arg *Arg) {
 		enc.writeDuration(arg.inner.Duration)
 	case ErrorArg:
 		enc.writeError(arg.inner.error)
+	case MapArg:
+		enc.writeMap(arg.inner.M)
+	case SliceArg:
+		enc.writeSlice(arg.inner.L)
+	case NilArg:
+		enc.writeNull()
 	}
-	enc.writeSplitComma()
 }
 
-func (enc *JsonEncoder) wrapKey(key string) string {
-	if enc.keyColor != nil {
-		return enc.keyColor.Sprint(key)
+func (enc *JsonEncoder) writeKeyValue2(consumer *argsConsumer) {
+	arg, err := consumer.getNext()
+	if err != nil {
+		return
 	}
-	return key
+	// "key": VALUE
+	enc.writeKey(arg.key, true)
+	enc.buf.WriteByte(':')
+	enc.writeValue(&arg)
+	enc.writeSplitComma(consumer)
 }
 
 func (enc *JsonEncoder) wrapString(value string) string {
@@ -191,6 +192,11 @@ func (enc *JsonEncoder) wrapNumber(value string) string {
 
 func (enc *JsonEncoder) writeKey(key string, isWrap bool) {
 	enc.buf.WriteByte('"')
+	if enc.Config.EscapeQuote && isWrap {
+		buf := make([]byte, 0, 3*len(key)/2)
+		data := strconv.AppendQuote(buf, key)
+		key = bytesToString(data[1 : len(data)-1])
+	}
 	if isWrap {
 		enc.buf.WriteString(enc.wrapKey(key))
 	} else {
@@ -199,8 +205,21 @@ func (enc *JsonEncoder) writeKey(key string, isWrap bool) {
 	enc.buf.WriteByte('"')
 }
 
+func (enc *JsonEncoder) writeNull() {
+	enc.buf.WriteString(enc.wrapString("null"))
+}
+
+func bytesToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
+}
+
 func (enc *JsonEncoder) writeString(value string, isWrap bool) {
 	enc.buf.WriteByte('"')
+	if enc.Config.EscapeQuote && isWrap {
+		buf := make([]byte, 0, 3*len(value)/2)
+		data := strconv.AppendQuote(buf, value)
+		value = bytesToString(data[1 : len(data)-1])
+	}
 	if isWrap {
 		enc.buf.WriteString(enc.wrapString(value))
 	} else {
@@ -275,8 +294,91 @@ func (enc *JsonEncoder) writeDuration(value time.Duration) {
 
 func (enc *JsonEncoder) writeError(value error) {
 	if value == nil {
-		enc.writeString("<nil>", true)
+		enc.writeNull()
 	} else {
 		enc.writeString(value.Error(), true)
+	}
+}
+
+func (enc *JsonEncoder) writeMap(value M) {
+	if value == nil {
+		enc.writeNull()
+	} else {
+		args := make([]Arg, 0, len(value))
+		for k, v := range value {
+			args = append(args, convert(k, v))
+		}
+		enc.beginObject()
+		consumer := &argsConsumer{args: args}
+		for consumer.hasNext() {
+			enc.writeKeyValue2(consumer)
+		}
+		enc.endObject()
+	}
+}
+
+func (enc *JsonEncoder) writeSlice(value []any) {
+	if value == nil {
+		enc.writeNull()
+	} else {
+		args := make([]Arg, 0, len(value))
+		for _, v := range value {
+			args = append(args, convert("", v))
+		}
+		enc.beginArray()
+		consumer := &argsConsumer{args: args}
+		for consumer.hasNext() {
+			arg, _ := consumer.getNext()
+			enc.writeValue(&arg)
+			enc.writeSplitComma(consumer)
+		}
+		enc.endArray()
+	}
+}
+
+func convert(k string, v any) Arg {
+	switch ele := v.(type) {
+	case string:
+		return Arg{key: k, typ: StringArg, inner: innerArg{string: ele}}
+	case bool:
+		return Arg{key: k, typ: BoolArg, inner: innerArg{bool: ele}}
+	case int8:
+		return Arg{key: k, typ: Int8Arg, inner: innerArg{int8: ele}}
+	case int16:
+		return Arg{key: k, typ: Int16Arg, inner: innerArg{int16: ele}}
+	case int32:
+		return Arg{key: k, typ: Int32Arg, inner: innerArg{int32: ele}}
+	case int64:
+		return Arg{key: k, typ: Int64Arg, inner: innerArg{int64: ele}}
+	case int:
+		return Arg{key: k, typ: IntArg, inner: innerArg{int: ele}}
+	case uint8:
+		return Arg{key: k, typ: UInt8Arg, inner: innerArg{uint8: ele}}
+	case uint16:
+		return Arg{key: k, typ: UInt16Arg, inner: innerArg{uint16: ele}}
+	case uint32:
+		return Arg{key: k, typ: UInt32Arg, inner: innerArg{uint32: ele}}
+	case uint64:
+		return Arg{key: k, typ: UInt64Arg, inner: innerArg{uint64: ele}}
+	case uint:
+		return Arg{key: k, typ: UIntArg, inner: innerArg{uint: ele}}
+	case float32:
+		return Arg{key: k, typ: Float32Arg, inner: innerArg{float32: ele}}
+	case float64:
+		return Arg{key: k, typ: Float64Arg, inner: innerArg{float64: ele}}
+	case time.Time:
+		return Arg{key: k, typ: TimeArg, inner: innerArg{Time: ele}}
+	case time.Duration:
+		return Arg{key: k, typ: DurationArg, inner: innerArg{Duration: ele}}
+	case error:
+		return Arg{key: k, typ: ErrorArg, inner: innerArg{error: ele}}
+	case M:
+		return Arg{key: k, typ: MapArg, inner: innerArg{M: ele}}
+	case []any:
+		return Arg{key: k, typ: SliceArg, inner: innerArg{L: ele}}
+	case nil:
+		return Arg{key: k, typ: NilArg}
+	default:
+		return Arg{key: k, typ: StringArg, inner: innerArg{string: fmt.Sprintf("%v", v)}}
 	}
 }
