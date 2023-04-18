@@ -32,6 +32,7 @@ func TestSimpleLogger(t *testing.T) {
 func TestJsonLogger(t *testing.T) {
 	logger := NewDevelopment(
 		WithColor(true),
+		WithEscapeQuote(true),
 		WithLevel(true, true),
 		WithCaller(true, true, true, true),
 		WithJsonEncoder(),
@@ -55,7 +56,35 @@ func TestJsonLogger(t *testing.T) {
 		Time("ts", time.Now().Add(time.Duration(time.Hour))),
 		Duration("duration", time.Duration(time.Hour+30*time.Minute+40*time.Second)),
 		Error("err", errors.New("error message")),
+		Error("err2", nil),
+		Map("map", M{
+			"name":     "tony",
+			"age":      34,
+			"time":     time.Now(),
+			"float32":  123.123,
+			"duration": time.Duration(time.Hour + 30*time.Minute + 40*time.Second),
+			"err":      nil,
+			"slice2":   []any{100, "hello", time.Now(), false, 10.2223, nil},
+			"map2": M{
+				"name2": "mike",
+				"age2":  20,
+			},
+		}),
+		Slice("slice", []any{100, "hello", time.Now(), false, 10.2223, nil}),
+		Map("map2", nil),
+		Slice("slice2", nil),
+		String("a", `"message"`),
+		String("b", `"message`),
+		String("c", `message"`),
+		String("d", `'message'`),
+		String("e", `'message`),
+		String("f", `message'`),
+		String("g", `message."test".message`),
+		String("h", `message.'test'.message`),
+		String("i", `"hello" '\n' "\n"`),
 	)
+
+	logger.Info(`"hello" \n "\n"`)
 	logger.Info("")
 	logger.Info("this is an info message")
 	logger.Warn("this is a warning message")
@@ -105,5 +134,15 @@ func BenchmarkJsonLogger(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info("this is a message")
+	}
+}
+
+func BenchmarkJsonLoggerWithEscapeQuote(b *testing.B) {
+	// disable level/time/caller attributes
+	logger := NewDevelopment(WithJsonEncoder(), WithEscapeQuote(true))
+	logger.SetOutput(nullWriter{})
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Info(`"this is a message"`)
 	}
 }
