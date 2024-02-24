@@ -1,12 +1,14 @@
 package logx
 
 type Logger interface {
-	Debug(msg string, args ...Arg)
-	Info(msg string, args ...Arg)
-	Warn(msg string, args ...Arg)
-	Error(msg string, args ...Arg)
-	Fatal(msg string, args ...Arg)
-	Panic(msg string, args ...Arg)
+	Trace(msg string, args ...arg)
+	Debug(msg string, args ...arg)
+	Info(msg string, args ...arg)
+	Warn(msg string, args ...arg)
+	Error(msg string, args ...arg)
+	Fatal(msg string, args ...arg)
+	Panic(msg string, args ...arg)
+	Tracef(format string, args ...any)
 	Debugf(format string, args ...any)
 	Infof(format string, args ...any)
 	Warnf(format string, args ...any)
