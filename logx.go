@@ -1,217 +1,87 @@
 package logx
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
-
-	"github.com/fatih/color"
-	"github.com/josexy/logx/internal"
 )
 
 type LoggerX struct {
-	isDiscard int32
-	lockLevel internal.LevelType
 	mu        sync.Mutex
-	out       io.Writer
+	lockLevel LevelType
 	buf       *bytes.Buffer
-	cfg       *internal.Config
+	logCtx    *logContext
 }
 
-// NewNop nothing to do
-func NewNop() *LoggerX {
-	return &LoggerX{
-		isDiscard: 1,
-		out:       io.Discard,
+func (l *LoggerX) print(level LevelType, msg string, args ...arg) {
+	// discard the log
+	if l.logCtx.writer == nil || l.logCtx.writer == io.Discard {
+		return
 	}
+	if l.skipLevelLog(level) {
+		return
+	}
+	l.output(level, msg, args...)
 }
 
-func NewDevelopment(opts ...ConfigOption) *LoggerX {
-	return newLogger(internal.LevelDebug, opts...)
+func (l *LoggerX) Trace(msg string, args ...arg) { l.print(LevelTrace, msg, args...) }
+
+func (l *LoggerX) Debug(msg string, args ...arg) { l.print(LevelDebug, msg, args...) }
+
+func (l *LoggerX) Info(msg string, args ...arg) { l.print(LevelInfo, msg, args...) }
+
+func (l *LoggerX) Warn(msg string, args ...arg) { l.print(LevelWarn, msg, args...) }
+
+func (l *LoggerX) Error(msg string, args ...arg) { l.print(LevelError, msg, args...) }
+
+func (l *LoggerX) Fatal(msg string, args ...arg) {
+	l.print(LevelFatal, msg, args...)
+	os.Exit(1)
 }
 
-func NewProduction(opts ...ConfigOption) *LoggerX {
-	return newLogger(internal.LevelInfo, opts...)
-}
-
-func newLogger(lvl internal.LevelType, opts ...ConfigOption) *LoggerX {
-	defaultCfg := new(internal.Config)
-	for _, opt := range opts {
-		opt.applyTo(defaultCfg)
-	}
-	defaultCfg.Encoder.Init()
-	return &LoggerX{
-		lockLevel: lvl,
-		buf:       bytes.NewBuffer(make([]byte, 128)),
-		cfg:       defaultCfg,
-		out:       color.Output,
-	}
-}
-
-func (l *LoggerX) SetOutput(w io.Writer) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.out = w
-	isDiscard := int32(0)
-	if w == io.Discard {
-		isDiscard = 1
-	}
-	atomic.StoreInt32(&l.isDiscard, isDiscard)
-}
-
-func (l *LoggerX) Debug(msg string, args ...Arg) {
-	if internal.LevelDebug < l.lockLevel {
-		return
-	}
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	l.output(internal.LevelDebug, msg, args...)
-}
-
-func (l *LoggerX) Info(msg string, args ...Arg) {
-	if internal.LevelInfo < l.lockLevel {
-		return
-	}
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	l.output(internal.LevelInfo, msg, args...)
-}
-
-func (l *LoggerX) Warn(msg string, args ...Arg) {
-	if internal.LevelWarn < l.lockLevel {
-		return
-	}
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	l.output(internal.LevelWarn, msg, args...)
-}
-
-func (l *LoggerX) Error(msg string, args ...Arg) {
-	if internal.LevelError < l.lockLevel {
-		return
-	}
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	l.output(internal.LevelError, msg, args...)
-}
-
-func (l *LoggerX) Panic(msg string, args ...Arg) {
-	if internal.LevelPanic < l.lockLevel {
-		return
-	}
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	l.output(internal.LevelPanic, msg, args...)
+func (l *LoggerX) Panic(msg string, args ...arg) {
+	l.print(LevelPanic, msg, args...)
 	panic(msg)
 }
 
-func (l *LoggerX) Fatal(msg string, args ...Arg) {
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	if internal.LevelFatal < l.lockLevel {
-		return
-	}
-	l.output(internal.LevelFatal, msg, args...)
+func (l *LoggerX) Tracef(format string, args ...any) { print(LevelTrace, fmt.Sprintf(format, args...)) }
+
+func (l *LoggerX) Debugf(format string, args ...any) { print(LevelDebug, fmt.Sprintf(format, args...)) }
+
+func (l *LoggerX) Infof(format string, args ...any) { print(LevelInfo, fmt.Sprintf(format, args...)) }
+
+func (l *LoggerX) Warnf(format string, args ...any) { print(LevelWarn, fmt.Sprintf(format, args...)) }
+
+func (l *LoggerX) Errorf(format string, args ...any) { print(LevelError, fmt.Sprintf(format, args...)) }
+
+func (l *LoggerX) Fatalf(format string, args ...any) {
+	print(LevelFatal, fmt.Sprintf(format, args...))
 	os.Exit(1)
-}
-
-func (l *LoggerX) Debugf(format string, args ...any) {
-	if internal.LevelDebug < l.lockLevel {
-		return
-	}
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	l.output(internal.LevelDebug, fmt.Sprintf(format, args...))
-}
-
-func (l *LoggerX) Infof(format string, args ...any) {
-	if internal.LevelInfo < l.lockLevel {
-		return
-	}
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	l.output(internal.LevelInfo, fmt.Sprintf(format, args...))
-}
-
-func (l *LoggerX) Warnf(format string, args ...any) {
-	if internal.LevelWarn < l.lockLevel {
-		return
-	}
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	l.output(internal.LevelWarn, fmt.Sprintf(format, args...))
-}
-
-func (l *LoggerX) Errorf(format string, args ...any) {
-	if internal.LevelError < l.lockLevel {
-		return
-	}
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	l.output(internal.LevelError, fmt.Sprintf(format, args...))
 }
 
 func (l *LoggerX) Panicf(format string, args ...any) {
-	if internal.LevelPanic < l.lockLevel {
-		return
-	}
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
 	value := fmt.Sprintf(format, args...)
-	l.output(internal.LevelPanic, value)
+	print(LevelPanic, value)
 	panic(value)
 }
 
-func (l *LoggerX) Fatalf(format string, args ...any) {
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	if internal.LevelFatal < l.lockLevel {
-		return
-	}
-	l.output(internal.LevelFatal, fmt.Sprintf(format, args...))
-	os.Exit(1)
-}
-
 func (l *LoggerX) ErrorBy(err error) {
-	if err == nil {
-		return
+	value := "<nil>"
+	if err != nil {
+		value = err.Error()
 	}
-	if internal.LevelError < l.lockLevel {
-		return
-	}
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	l.output(internal.LevelError, err.Error())
+	print(LevelError, value)
 }
 
 func (l *LoggerX) PanicBy(err error) {
 	if err == nil {
 		return
 	}
-	if internal.LevelPanic < l.lockLevel {
-		return
-	}
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	l.output(internal.LevelPanic, err.Error())
+	print(LevelPanic, err.Error())
 	panic(err)
 }
 
@@ -219,38 +89,41 @@ func (l *LoggerX) FatalBy(err error) {
 	if err == nil {
 		return
 	}
-	if atomic.LoadInt32(&l.isDiscard) != 0 {
-		return
-	}
-	if internal.LevelFatal < l.lockLevel {
-		return
-	}
-	l.output(internal.LevelFatal, err.Error())
+	print(LevelFatal, err.Error())
 	os.Exit(1)
 }
 
-func (l *LoggerX) output(lvl internal.LevelType, msg string, args ...Arg) {
-	if l.cfg.Encoder == nil {
+func (l *LoggerX) skipLevelLog(expect LevelType) bool {
+	return l.lockLevel > expect
+}
+
+func (l *LoggerX) output(level LevelType, msg string, args ...arg) {
+	if l.logCtx.encoder == nil {
 		return
 	}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if l.cfg.TimeItem.Enable {
-		l.cfg.TimeItem.Now = time.Now()
+	if l.logCtx.timeField.enable {
+		l.logCtx.timeField.now = time.Now()
 	}
-	if l.cfg.LevelItem.Enable {
-		l.cfg.LevelItem.Typ = lvl
+	if l.logCtx.levelField.enable {
+		l.logCtx.levelField.typ = level
 	}
 
 	// reset the buffer
 	l.buf.Reset()
 
-	_ = l.cfg.Encoder.Encode(l.buf, msg, args...)
+	_ = l.logCtx.encoder.Encode(l.buf, msg, args...)
 
 	if l.buf.Len() > 0 && l.buf.Bytes()[l.buf.Len()-1] != '\n' {
 		l.buf.WriteByte('\n')
 	}
-	_, _ = l.out.Write(l.buf.Bytes())
+	_, _ = l.logCtx.writer.Write(l.buf.Bytes())
+
+	// for file writer, need to flush the buffer data to file
+	if flusher, ok := l.logCtx.writer.(*bufio.Writer); ok {
+		flusher.Flush()
+	}
 }

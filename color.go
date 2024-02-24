@@ -1,4 +1,4 @@
-package internal
+package logx
 
 import "github.com/fatih/color"
 
