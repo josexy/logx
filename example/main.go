@@ -25,6 +25,7 @@ func main() {
 	loggerSimple.Error("this is an error message")
 
 	logCtx = logCtx.Copy().
+		WithPrefix(logx.Pair{"scope", "test"}, logx.Pair{"version", "v1"}, logx.Pair{"list", []any{100, "a", "b"}}).
 		WithEncoder(logx.Json).
 		WithEscapeQuote(true).
 		WithCaller(true, true, true, true).
@@ -91,6 +92,10 @@ func main() {
 		logx.String("g", `message."test".message`),
 		logx.String("h", `message.'test'.message`),
 		logx.String("i", `"hello" '\n' "\n"`),
+		logx.Any("any", "hello"),
+		logx.Any("any2", time.Now()),
+		logx.Any("any3", &struct{ k, v string }{k: "key", v: "value"}),
+		logx.Any("any4", loggerJson),
 	)
 
 	loggerSimple.Error("this is an error message")

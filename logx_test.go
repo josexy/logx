@@ -3,6 +3,7 @@ package logx
 import (
 	"errors"
 	"log"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -88,6 +89,10 @@ func TestJsonLogger(t *testing.T) {
 		String("g", `message."test".message`),
 		String("h", `message.'test'.message`),
 		String("i", `"hello" '\n' "\n"`),
+		Any("any", "hello"),
+		Any("any2", time.Now()),
+		Any("any3", &struct{ k, v string }{k: "key", v: "value"}),
+		Any("any4", logger),
 	)
 
 	logger.Info(`"hello" \n "\n"`)
@@ -120,6 +125,22 @@ func BenchmarkStdWriterLogger(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Writer().Write([]byte("this is a message\n"))
+	}
+}
+
+func BenchmarkSlogTextLogger(b *testing.B) {
+	logger := slog.New(slog.NewTextHandler(nullWriter{}, nil))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Info("this is a message")
+	}
+}
+
+func BenchmarkSlogJsonLogger(b *testing.B) {
+	logger := slog.New(slog.NewJSONHandler(nullWriter{}, nil))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Info("this is a message")
 	}
 }
 
