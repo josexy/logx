@@ -14,6 +14,7 @@ type logContext struct {
 	callerField
 	encoder
 	writer      io.Writer
+	preKeyValus []Pair
 	escapeQuote bool
 }
 
@@ -25,6 +26,11 @@ func (lc *logContext) Copy() *logContext {
 	newLogCtx := new(logContext)
 	*newLogCtx = *lc
 	return newLogCtx
+}
+
+func (lc *logContext) WithPrefix(keyAndValues ...Pair) *logContext {
+	lc.preKeyValus = keyAndValues
+	return lc
 }
 
 func (lc *logContext) WithColor(enable bool) *logContext {

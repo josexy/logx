@@ -48,7 +48,8 @@ func (enc *JsonEncoder) Encode(w *bytes.Buffer, msg string, args ...arg) error {
 	enc.consumer.reset()
 
 	enc.beginObject()
-	enc.prefix()
+	enc.basePrompt()
+	enc.withPrefix()
 	enc.consumer.put(arg{key: "msg", typ: stringArg, inner: innerArg{string: msg}})
 	enc.consumer.put(args...)
 	for enc.consumer.hasNext() {
@@ -66,7 +67,7 @@ func (enc *JsonEncoder) beginArray() { enc.buf.WriteByte('[') }
 
 func (enc *JsonEncoder) endArray() { enc.buf.WriteByte(']') }
 
-func (enc *JsonEncoder) prefix() {
+func (enc *JsonEncoder) basePrompt() {
 	if enc.levelField.enable {
 		enc.consumer.put(enc.levelField.toArg())
 	}
@@ -75,6 +76,15 @@ func (enc *JsonEncoder) prefix() {
 	}
 	if enc.callerField.enable {
 		enc.consumer.put(enc.callerField.toArg())
+	}
+}
+
+func (enc *JsonEncoder) withPrefix() {
+	if len(enc.preKeyValus) == 0 {
+		return
+	}
+	for i := 0; i < len(enc.preKeyValus); i++ {
+		enc.consumer.put(convert(enc.preKeyValus[i].Key, enc.preKeyValus[i].Value))
 	}
 }
 
@@ -135,6 +145,8 @@ func (enc *JsonEncoder) value(arg *arg) {
 		enc.slice(arg.inner.L)
 	case nilArg:
 		enc.null()
+	case anyArg:
+		enc.any(arg.inner.any)
 	}
 }
 
@@ -195,6 +207,10 @@ func (enc *JsonEncoder) key(key string, isWrap bool) {
 
 func (enc *JsonEncoder) null() {
 	enc.buf.WriteString(enc.wrapString("null"))
+}
+
+func (enc *JsonEncoder) any(value any) {
+	enc.buf.WriteString(enc.wrapString(fmt.Sprintf("\"%v\"", value)))
 }
 
 func bytesToString(b []byte) string {
@@ -386,6 +402,6 @@ func convert(k string, v any) arg {
 	case nil:
 		return arg{key: k, typ: nilArg}
 	default:
-		return arg{key: k, typ: stringArg, inner: innerArg{string: fmt.Sprintf("%v", v)}}
+		return arg{key: k, typ: anyArg, inner: innerArg{any: v}}
 	}
 }
