@@ -48,24 +48,30 @@ func (l *LoggerX) Panic(msg string, args ...arg) {
 	panic(msg)
 }
 
-func (l *LoggerX) Tracef(format string, args ...any) { print(LevelTrace, fmt.Sprintf(format, args...)) }
+func (l *LoggerX) Tracef(format string, args ...any) {
+	l.print(LevelTrace, fmt.Sprintf(format, args...))
+}
 
-func (l *LoggerX) Debugf(format string, args ...any) { print(LevelDebug, fmt.Sprintf(format, args...)) }
+func (l *LoggerX) Debugf(format string, args ...any) {
+	l.print(LevelDebug, fmt.Sprintf(format, args...))
+}
 
-func (l *LoggerX) Infof(format string, args ...any) { print(LevelInfo, fmt.Sprintf(format, args...)) }
+func (l *LoggerX) Infof(format string, args ...any) { l.print(LevelInfo, fmt.Sprintf(format, args...)) }
 
-func (l *LoggerX) Warnf(format string, args ...any) { print(LevelWarn, fmt.Sprintf(format, args...)) }
+func (l *LoggerX) Warnf(format string, args ...any) { l.print(LevelWarn, fmt.Sprintf(format, args...)) }
 
-func (l *LoggerX) Errorf(format string, args ...any) { print(LevelError, fmt.Sprintf(format, args...)) }
+func (l *LoggerX) Errorf(format string, args ...any) {
+	l.print(LevelError, fmt.Sprintf(format, args...))
+}
 
 func (l *LoggerX) Fatalf(format string, args ...any) {
-	print(LevelFatal, fmt.Sprintf(format, args...))
+	l.print(LevelFatal, fmt.Sprintf(format, args...))
 	os.Exit(1)
 }
 
 func (l *LoggerX) Panicf(format string, args ...any) {
 	value := fmt.Sprintf(format, args...)
-	print(LevelPanic, value)
+	l.print(LevelPanic, value)
 	panic(value)
 }
 
@@ -74,14 +80,14 @@ func (l *LoggerX) ErrorBy(err error) {
 	if err != nil {
 		value = err.Error()
 	}
-	print(LevelError, value)
+	l.print(LevelError, value)
 }
 
 func (l *LoggerX) PanicBy(err error) {
 	if err == nil {
 		return
 	}
-	print(LevelPanic, err.Error())
+	l.print(LevelPanic, err.Error())
 	panic(err)
 }
 
@@ -89,7 +95,7 @@ func (l *LoggerX) FatalBy(err error) {
 	if err == nil {
 		return
 	}
-	print(LevelFatal, err.Error())
+	l.print(LevelFatal, err.Error())
 	os.Exit(1)
 }
 
