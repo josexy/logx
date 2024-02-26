@@ -97,6 +97,8 @@ func main() {
 		logx.Any("any3", &struct{ k, v string }{k: "key", v: "value"}),
 		logx.Any("any4", loggerJson),
 	)
+	loggerJson.Infof("hello %s", "world")
 
 	loggerSimple.Error("this is an error message")
+	loggerSimple.Tracef("hello %s", "world")
 }
