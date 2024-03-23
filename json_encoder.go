@@ -53,7 +53,9 @@ func (enc *JsonEncoder) Encode(w *bytes.Buffer, msg string, args ...arg) error {
 	enc.consumer.put(arg{key: "msg", typ: stringArg, inner: innerArg{string: msg}})
 	enc.consumer.put(args...)
 	for enc.consumer.hasNext() {
-		enc.keyValue(enc.consumer)
+		if err := enc.keyValue(enc.consumer); err != nil {
+			return err
+		}
 	}
 	enc.endObject()
 	return nil
@@ -150,16 +152,20 @@ func (enc *JsonEncoder) value(arg *arg) {
 	}
 }
 
-func (enc *JsonEncoder) keyValue(consumer *argsConsumer) {
+func (enc *JsonEncoder) keyValue(consumer *argsConsumer) error {
 	arg, err := consumer.getNext()
 	if err != nil {
-		return
+		return err
+	}
+	if arg.typ == noneArg {
+		return errInvalidType
 	}
 	// "key": VALUE
 	enc.key(arg.key, true)
 	enc.buf.WriteByte(':')
 	enc.value(arg)
 	enc.splitComma(consumer)
+	return nil
 }
 
 func (enc *JsonEncoder) wrapString(value string) string {
@@ -193,9 +199,7 @@ func (enc *JsonEncoder) wrapNumber(value string) string {
 func (enc *JsonEncoder) key(key string, isWrap bool) {
 	enc.buf.WriteByte('"')
 	if enc.escapeQuote && isWrap {
-		buf := make([]byte, 0, 3*len(key)/2)
-		data := strconv.AppendQuote(buf, key)
-		key = bytesToString(data[1 : len(data)-1])
+		key = quoteString(key)
 	}
 	if isWrap {
 		enc.buf.WriteString(enc.wrapKey(key))
@@ -210,19 +214,13 @@ func (enc *JsonEncoder) null() {
 }
 
 func (enc *JsonEncoder) any(value any) {
-	enc.buf.WriteString(enc.wrapString(fmt.Sprintf("\"%v\"", value)))
-}
-
-func bytesToString(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
+	enc.string(fmt.Sprintf("%+v", value), true)
 }
 
 func (enc *JsonEncoder) string(value string, wrap bool) {
 	enc.buf.WriteByte('"')
 	if enc.escapeQuote && wrap {
-		buf := make([]byte, 0, 3*len(value)/2)
-		data := strconv.AppendQuote(buf, value)
-		value = bytesToString(data[1 : len(data)-1])
+		value = quoteString(value)
 	}
 	if wrap {
 		enc.buf.WriteString(enc.wrapString(value))
@@ -404,4 +402,14 @@ func convert(k string, v any) arg {
 	default:
 		return arg{key: k, typ: anyArg, inner: innerArg{any: v}}
 	}
+}
+
+func quoteString(value string) string {
+	buf := make([]byte, 0, 3*len(value)/2)
+	data := strconv.AppendQuote(buf, value)
+	return bytesToString(data[1 : len(data)-1])
+}
+
+func bytesToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
 }

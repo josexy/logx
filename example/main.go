@@ -66,7 +66,8 @@ func main() {
 		logx.SortedMap("sortedmap2",
 			logx.Pair{Key: "key1", Value: "value1"},
 			logx.Pair{"key2", 100},
-			logx.Pair{"key3", logx.M{"list": []any{10, "20", true, 30.10, nil}}}),
+			logx.Pair{"key3", map[string]int{"a": 10, "b": 20}},
+			logx.Pair{"key4", logx.M{"list": []any{10, "20", true, 30.10, nil}}}),
 		logx.Map("map", logx.M{
 			"name":     "tony",
 			"age":      34,
@@ -96,6 +97,15 @@ func main() {
 		logx.Any("any2", time.Now()),
 		logx.Any("any3", &struct{ k, v string }{k: "key", v: "value"}),
 		logx.Any("any4", loggerJson),
+		logx.Any("any5", "\"xxx\""),
+		logx.Any("any6", `"""`),
+		logx.Slice2("slice3", true, false, 112233, 1122.33, "hello world", time.Now(), nil),
+		logx.Slice3("slice4", []string{"hello", "world", "golang"}),
+		logx.Slice3("slice5", []int{10, 20, 30, 40}),
+		logx.Slice3("slice6", []struct {
+			string
+			int
+		}{{"hello", 10}, {"world", 20}}),
 	)
 	loggerJson.Infof("hello %s", "world")
 

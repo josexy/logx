@@ -65,7 +65,10 @@ type innerArg struct {
 	any
 }
 
-var errEoc = errors.New("end of consumer")
+var (
+	errEoc         = errors.New("end of consumer")
+	errInvalidType = errors.New("invalid arg type")
+)
 
 type arg struct {
 	key    string
@@ -180,6 +183,18 @@ func SortedMap(key string, value ...Pair) arg {
 
 func Slice(key string, value []any) arg {
 	return arg{key: key, typ: sliceArg, inner: innerArg{L: value}}
+}
+
+func Slice2(key string, value ...any) arg {
+	return arg{key: key, typ: sliceArg, inner: innerArg{L: value}}
+}
+
+func Slice3[T any](key string, value []T) arg {
+	list := make([]any, 0, len(value))
+	for _, v := range value {
+		list = append(list, v)
+	}
+	return arg{key: key, typ: sliceArg, inner: innerArg{L: list}}
 }
 
 func Any(key string, value any) arg {
