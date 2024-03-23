@@ -1,6 +1,7 @@
 package logx
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 )
@@ -22,7 +23,8 @@ func (t *timeField) toArg() arg {
 		arg.typ = int64Arg
 		arg.inner = innerArg{int64: val.(int64)}
 	default:
-		arg.typ = noneArg
+		arg.typ = stringArg
+		arg.inner = innerArg{string: fmt.Sprintf("%v", val)}
 	}
 	return arg
 }

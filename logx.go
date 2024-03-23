@@ -121,7 +121,9 @@ func (l *LoggerX) output(level LevelType, msg string, args ...arg) {
 	// reset the buffer
 	l.buf.Reset()
 
-	_ = l.logCtx.encoder.Encode(l.buf, msg, args...)
+	if err := l.logCtx.encoder.Encode(l.buf, msg, args...); err != nil {
+		return
+	}
 
 	if l.buf.Len() > 0 && l.buf.Bytes()[l.buf.Len()-1] != '\n' {
 		l.buf.WriteByte('\n')
