@@ -25,6 +25,14 @@ func NewLogContext() *logContext {
 func (lc *logContext) Copy() *logContext {
 	newLogCtx := new(logContext)
 	*newLogCtx = *lc
+	newLogCtx.preKeyValus = make([]Pair, 0, len(lc.preKeyValus))
+	newLogCtx.preKeyValus = append(newLogCtx.preKeyValus, lc.preKeyValus...)
+	switch lc.encoder.(type) {
+	case *JsonEncoder:
+		newLogCtx = newLogCtx.WithEncoder(Json)
+	case *SimpleEncoder:
+		newLogCtx = newLogCtx.WithEncoder(Simple)
+	}
 	return newLogCtx
 }
 

@@ -111,4 +111,9 @@ func main() {
 
 	loggerSimple.Error("this is an error message")
 	loggerSimple.Tracef("hello %s", "world")
+
+	newLogCtx := logCtx.Copy().WithTime(false, nil).WithPrefix(logx.Pair{"ip", "11.22.33.44"})
+	newLogCtx.BuildConsoleLogger(logx.LevelTrace).Debug("hello world")
+	newLogCtx2 := newLogCtx.Copy().WithPrefix(logx.Pair{"host", "localhost"})
+	newLogCtx2.BuildConsoleLogger(logx.LevelTrace).Debug("hello world")
 }
