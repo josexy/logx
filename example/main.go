@@ -116,4 +116,18 @@ func main() {
 	newLogCtx.BuildConsoleLogger(logx.LevelTrace).Debug("hello world")
 	newLogCtx2 := newLogCtx.Copy().WithPrefix(logx.Pair{"host", "localhost"})
 	newLogCtx2.BuildConsoleLogger(logx.LevelTrace).Debug("hello world")
+
+	newLogger := logCtx.Copy().BuildConsoleLogger(logx.LevelTrace)
+	newLogger.WithPrefix(map[string]any{
+		"key1": "value",
+		"key2": 100,
+		"key3": true,
+	}).Debug("hello world")
+	newLogger.WithPrefix2("key1", "value", "key2", 200, "key3", false).Debug("hello world")
+	newLogger.Debug("hello world")
+	newLogger = newLogger.WithPrefix(nil)
+	newLogger.Debug("hello world")
+	newLogger = logCtx.Copy().WithPrefix(logx.Pair{"key", "xxx"}).BuildConsoleLogger(logx.LevelTrace)
+	newLogger.Debug("hello world")
+	newLogger.WithPrefix2("new-key", 1000).Debug("hello world")
 }

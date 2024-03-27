@@ -18,4 +18,6 @@ type Logger interface {
 	PanicBy(err error)
 	ErrorBy(err error)
 	FatalBy(err error)
+	WithPrefix(keyValues map[string]any) Logger
+	WithPrefix2(keyValues ...any) Logger
 }
