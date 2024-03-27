@@ -103,6 +103,45 @@ func (l *LoggerX) skipLevelLog(expect LevelType) bool {
 	return l.lockLevel > expect
 }
 
+func (l *LoggerX) WithPrefix(keyValues map[string]any) Logger {
+	if keyValues == nil {
+		l.logCtx.preKeyValues = nil
+		return l
+	}
+	if len(keyValues) > 0 {
+		l.logCtx.preKeyValues = make([]Pair, 0, len(keyValues))
+		for k, v := range keyValues {
+			l.logCtx.preKeyValues = append(l.logCtx.preKeyValues, Pair{
+				Key:   k,
+				Value: v,
+			})
+		}
+	}
+	return l
+}
+
+func (l *LoggerX) WithPrefix2(keyValues ...any) Logger {
+	if len(keyValues) == 0 {
+		l.logCtx.preKeyValues = nil
+		return l
+	}
+	if len(keyValues)%2 != 0 {
+		return l
+	}
+	l.logCtx.preKeyValues = make([]Pair, 0, len(keyValues))
+	for i := 0; i < len(keyValues); i += 2 {
+		key, ok := keyValues[i].(string)
+		if !ok {
+			continue
+		}
+		l.logCtx.preKeyValues = append(l.logCtx.preKeyValues, Pair{
+			Key:   key,
+			Value: keyValues[i+1],
+		})
+	}
+	return l
+}
+
 func (l *LoggerX) output(level LevelType, msg string, args ...arg) {
 	if l.logCtx.encoder == nil {
 		return

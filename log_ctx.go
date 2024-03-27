@@ -13,9 +13,9 @@ type logContext struct {
 	timeField
 	callerField
 	encoder
-	writer      io.Writer
-	preKeyValus []Pair
-	escapeQuote bool
+	writer       io.Writer
+	preKeyValues []Pair
+	escapeQuote  bool
 }
 
 func NewLogContext() *logContext {
@@ -25,8 +25,8 @@ func NewLogContext() *logContext {
 func (lc *logContext) Copy() *logContext {
 	newLogCtx := new(logContext)
 	*newLogCtx = *lc
-	newLogCtx.preKeyValus = make([]Pair, 0, len(lc.preKeyValus))
-	newLogCtx.preKeyValus = append(newLogCtx.preKeyValus, lc.preKeyValus...)
+	newLogCtx.preKeyValues = make([]Pair, 0, len(lc.preKeyValues))
+	newLogCtx.preKeyValues = append(newLogCtx.preKeyValues, lc.preKeyValues...)
 	switch lc.encoder.(type) {
 	case *JsonEncoder:
 		newLogCtx = newLogCtx.WithEncoder(Json)
@@ -37,7 +37,7 @@ func (lc *logContext) Copy() *logContext {
 }
 
 func (lc *logContext) WithPrefix(keyAndValues ...Pair) *logContext {
-	lc.preKeyValus = keyAndValues
+	lc.preKeyValues = keyAndValues
 	return lc
 }
 

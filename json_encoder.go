@@ -82,11 +82,11 @@ func (enc *JsonEncoder) basePrompt() {
 }
 
 func (enc *JsonEncoder) withPrefix() {
-	if len(enc.preKeyValus) == 0 {
+	if len(enc.preKeyValues) == 0 {
 		return
 	}
-	for i := 0; i < len(enc.preKeyValus); i++ {
-		enc.consumer.put(convert(enc.preKeyValus[i].Key, enc.preKeyValus[i].Value))
+	for i := 0; i < len(enc.preKeyValues); i++ {
+		enc.consumer.put(convert(enc.preKeyValues[i].Key, enc.preKeyValues[i].Value))
 	}
 }
 
