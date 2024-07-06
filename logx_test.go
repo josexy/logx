@@ -11,12 +11,13 @@ import (
 )
 
 func TestSimpleLogger(t *testing.T) {
-	logger := NewLogContext().WithColor(true).
+	logger := NewLogContext().
+		WithColorfulset(true, TextColorAttri{}).
 		WithLevel(true, false).
 		WithCaller(true, true, true, true).
-		WithWriter(color.Output).
+		WithWriter(AddSync(color.Output)).
 		WithTime(true, func(t time.Time) any { return t.Format(time.DateTime) }).
-		WithEncoder(Simple).BuildConsoleLogger(LevelTrace)
+		WithEncoder(Console).BuildConsoleLogger(LevelTrace)
 
 	logger.Debug("")
 	logger.Debug("this is a debug message")
@@ -25,18 +26,15 @@ func TestSimpleLogger(t *testing.T) {
 	logger.Error("this is an error message")
 	logger.Debugf("hello %s", "golang")
 	logger.Infof("time :%v", time.Now())
-	logger.ErrorBy(errors.New("error"))
-	// logger.PanicBy(errors.New("panic"))
-	// logger.FatalBy(errors.New("fatal"))
-	// logger.Panic("this is a panic message")
-	// logger.Fatal("this is a fatal message")
+	logger.ErrorWith(errors.New("error"))
 }
 
 func TestJsonLogger(t *testing.T) {
-	logger := NewLogContext().WithColor(true).
-		WithLevel(true, false).
+	logger := NewLogContext().
+		WithColorfulset(true, TextColorAttri{}).
+		WithLevel(true, true).
 		WithCaller(true, true, true, true).
-		WithWriter(color.Output).
+		WithWriter(AddSync(color.Output)).
 		WithTime(true, func(t time.Time) any { return t.Format(time.DateTime) }).
 		WithEncoder(Json).BuildConsoleLogger(LevelTrace)
 
@@ -59,27 +57,9 @@ func TestJsonLogger(t *testing.T) {
 		Duration("duration", time.Duration(time.Hour+30*time.Minute+40*time.Second)),
 		Error("err", errors.New("error message")),
 		Error("err2", nil),
-		SortedMap("sortedmap1"),
-		SortedMap("sortedmap2",
-			Pair{Key: "key1", Value: "value1"},
-			Pair{"key2", 100},
-			Pair{"key3", M{"list": []any{10, "20", true, 30.10, nil}}}),
-		Map("map", M{
-			"name":     "tony",
-			"age":      34,
-			"time":     time.Now(),
-			"float32":  123.123,
-			"duration": time.Duration(time.Hour + 30*time.Minute + 40*time.Second),
-			"err":      nil,
-			"slice2":   []any{100, "hello", time.Now(), false, 10.2223, nil},
-			"map2": M{
-				"name2": "mike",
-				"age2":  20,
-			},
-		}),
-		Slice("slice", []any{100, "hello", time.Now(), false, 10.2223, nil}),
-		Map("map2", nil),
-		Slice("slice2", nil),
+		Array("slice", []any{100, "hello", time.Now(), false, 10.2223, nil}),
+		Object("map2"),
+		Array("slice2", nil),
 		String("a", `"message"`),
 		String("b", `"message`),
 		String("c", `message"`),
@@ -102,7 +82,7 @@ func TestJsonLogger(t *testing.T) {
 	logger.Error("this is an error message")
 	logger.Debugf("hello %s", "golang")
 	logger.Infof("time :%v", time.Now())
-	logger.ErrorBy(errors.New("error"))
+	logger.ErrorWith(errors.New("error"))
 	// logger.Panic("this is a panic message")
 	// logger.Fatal("this is a fatal message")
 }
@@ -144,9 +124,9 @@ func BenchmarkSlogJsonLogger(b *testing.B) {
 	}
 }
 
-func BenchmarkSimpleLogger(b *testing.B) {
+func BenchmarkConsoleLogger(b *testing.B) {
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithWriter(nullWriter{}).WithEncoder(Simple).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Console).BuildConsoleLogger(LevelTrace)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info("this is a message")
@@ -155,18 +135,54 @@ func BenchmarkSimpleLogger(b *testing.B) {
 
 func BenchmarkJsonLogger(b *testing.B) {
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithWriter(nullWriter{}).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info("this is a message")
 	}
 }
 
-func BenchmarkJsonLoggerWithEscapeQuote(b *testing.B) {
+func BenchmarkConsoleLoggerWithEscapeQuote(b *testing.B) {
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithWriter(nullWriter{}).WithEscapeQuote(true).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEscapeQuote(true).WithEncoder(Console).BuildConsoleLogger(LevelTrace)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info(`"this is a message"`)
+	}
+}
+
+func BenchmarkJsonLoggerWithEscapeQuote(b *testing.B) {
+	// disable level/time/caller attributes
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEscapeQuote(true).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Info(`"this is a message"`)
+	}
+}
+
+func BenchmarkConsoleLoggerWithField(b *testing.B) {
+	// disable level/time/caller attributes
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Console).BuildConsoleLogger(LevelTrace)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Info("this is a message", Int("key", 100))
+	}
+}
+
+func BenchmarkJsonLoggerWithField(b *testing.B) {
+	// disable level/time/caller attributes
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Info("this is a message", Int("key", 100))
+	}
+}
+
+func BenchmarkJsonLoggerWithEscapeQuoteWithField(b *testing.B) {
+	// disable level/time/caller attributes
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEscapeQuote(true).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Info(`"this is a message"`, Int("key", 100))
 	}
 }

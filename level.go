@@ -19,12 +19,12 @@ type levelField struct {
 	typ    LevelType
 }
 
-func (lvl *levelField) toArg() arg {
-	return arg{
-		key:    "level",
-		typ:    stringArg,
-		inner:  innerArg{string: lvl.String()},
-		nowrap: true,
+func (lvl *levelField) format() Field {
+	return Field{
+		Key:         "level",
+		Type:        StringType,
+		StringValue: lvl.String(),
+		NoWrap:      true,
 	}
 }
 
@@ -97,7 +97,11 @@ func (lvl *levelField) String() (out string) {
 			out = HiYellow(out)
 		}
 	default:
-		out = "unknown"
+		if lvl.lower {
+			out = "unknown"
+		} else {
+			out = "UNKNOWN"
+		}
 	}
 	return
 }

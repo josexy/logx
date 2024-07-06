@@ -1,10 +1,9 @@
 package logx
 
 import (
-	"bufio"
 	"bytes"
 	"io"
-	"os"
+	"sync"
 	"time"
 )
 
@@ -13,9 +12,10 @@ type logContext struct {
 	timeField
 	callerField
 	encoder
-	writer       io.Writer
-	preKeyValues []Pair
-	escapeQuote  bool
+	colorfulset
+	writer      WriteSyncer
+	preFields   []Field
+	escapeQuote bool
 }
 
 func NewLogContext() *logContext {
@@ -25,26 +25,28 @@ func NewLogContext() *logContext {
 func (lc *logContext) Copy() *logContext {
 	newLogCtx := new(logContext)
 	*newLogCtx = *lc
-	newLogCtx.preKeyValues = make([]Pair, 0, len(lc.preKeyValues))
-	newLogCtx.preKeyValues = append(newLogCtx.preKeyValues, lc.preKeyValues...)
+	newLogCtx.preFields = make([]Field, 0, len(lc.preFields))
+	newLogCtx.preFields = append(newLogCtx.preFields, lc.preFields...)
 	switch lc.encoder.(type) {
 	case *JsonEncoder:
 		newLogCtx = newLogCtx.WithEncoder(Json)
-	case *SimpleEncoder:
-		newLogCtx = newLogCtx.WithEncoder(Simple)
+	case *ConsoleEncoder:
+		newLogCtx = newLogCtx.WithEncoder(Console)
 	}
 	return newLogCtx
 }
 
-func (lc *logContext) WithPrefix(keyAndValues ...Pair) *logContext {
-	lc.preKeyValues = keyAndValues
+func (lc *logContext) WithFields(fields ...Field) *logContext {
+	lc.preFields = fields
 	return lc
 }
 
-func (lc *logContext) WithColor(enable bool) *logContext {
+func (lc *logContext) WithColorfulset(enable bool, attr TextColorAttri) *logContext {
 	lc.levelField.color = enable
 	lc.timeField.color = enable
 	lc.callerField.color = enable
+	lc.colorfulset.enable = enable
+	lc.colorfulset.TextColorAttri = attr
 	return lc
 }
 
@@ -57,11 +59,11 @@ func (lc *logContext) WithLevel(enable, lower bool) *logContext {
 func (lc *logContext) WithTime(enable bool, format func(time.Time) any) *logContext {
 	if format == nil {
 		format = func(t time.Time) any {
-			return t.Format(time.DateTime)
+			return t.Format(time.RFC3339)
 		}
 	}
 	lc.timeField.enable = enable
-	lc.timeField.format = format
+	lc.timeField.fn = format
 	return lc
 }
 
@@ -78,15 +80,15 @@ func (lc *logContext) WithEscapeQuote(enable bool) *logContext {
 	return lc
 }
 
-func (lc *logContext) WithWriter(writer io.Writer) *logContext {
+func (lc *logContext) WithWriter(writer WriteSyncer) *logContext {
 	lc.writer = writer
 	return lc
 }
 
 func (lc *logContext) WithEncoder(encoder EncoderType) *logContext {
 	switch encoder {
-	case Simple:
-		lc.encoder = &SimpleEncoder{logContext: lc}
+	case Console:
+		lc.encoder = &ConsoleEncoder{logContext: lc}
 	case Json:
 		lc.encoder = &JsonEncoder{logContext: lc}
 	default:
@@ -100,22 +102,25 @@ func (lc *logContext) BuildConsoleLogger(level LevelType) Logger {
 		lc.encoder.Init()
 	}
 	return &LoggerX{
-		lockLevel: level,
-		buf:       bytes.NewBuffer(make([]byte, 128)),
-		logCtx:    lc,
+		logCtx:   lc,
+		logLevel: level,
+		pool: sync.Pool{
+			New: func() any { return bytes.NewBuffer(make([]byte, 0, 1024)) },
+		},
 	}
 }
 
-func (lc *logContext) BuildFileLogger(level LevelType, fsWriter *os.File) Logger {
+func (lc *logContext) BuildFileLogger(level LevelType, writer io.Writer) Logger {
 	// For file logger, need to disable color attributes
-	lc = lc.WithColor(false).WithWriter(bufio.NewWriter(fsWriter))
-
+	lc = lc.WithColorfulset(false, TextColorAttri{}).WithWriter(AddSync(writer))
 	if lc.encoder != nil {
 		lc.encoder.Init()
 	}
 	return &LoggerX{
-		lockLevel: level,
-		buf:       bytes.NewBuffer(make([]byte, 128)),
-		logCtx:    lc,
+		logCtx:   lc,
+		logLevel: level,
+		pool: sync.Pool{
+			New: func() any { return bytes.NewBuffer(make([]byte, 0, 1024)) },
+		},
 	}
 }

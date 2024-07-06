@@ -16,22 +16,22 @@ type callerField struct {
 	color     bool
 }
 
-func (c *callerField) toArg() arg {
-	fileName, funcName, lineNum := c.Value()
-	sm := make([]Pair, 0, 3)
+func (c *callerField) format() Field {
+	fileName, funcName, lineNum := c.value()
+	sm := make([]Field, 0, 3)
 	if fileName.has() {
-		sm = append(sm, Pair{Key: "file", Value: fileName.get()})
+		sm = append(sm, String("file", fileName.get()))
 	}
 	if funcName.has() {
-		sm = append(sm, Pair{Key: "func", Value: funcName.get()})
+		sm = append(sm, String("func", funcName.get()))
 	}
 	if lineNum.has() {
-		sm = append(sm, Pair{Key: "line", Value: lineNum.get()})
+		sm = append(sm, Int("line", lineNum.get()))
 	}
-	return arg{key: "caller", typ: sortedMapArg, inner: innerArg{SM: sm}}
+	return Object("caller", sm...)
 }
 
-func (c *callerField) Value() (fileName, funcName optval[string], lineNum optval[int]) {
+func (c *callerField) value() (fileName, funcName optval[string], lineNum optval[int]) {
 	if !c.enable {
 		return
 	}
@@ -54,19 +54,24 @@ func (c *callerField) Value() (fileName, funcName optval[string], lineNum optval
 }
 
 func (c *callerField) String() string {
-	fileName, funcName, lineNum := c.Value()
+	fileName, funcName, lineNum := c.value()
 	var w strings.Builder
+	var packageName string
+	if funcName.has() {
+		parts := strings.Split(funcName.value, ".")
+		if len(parts) > 1 {
+			packageName = parts[0]
+		}
+	}
 	if fileName.has() {
+		if packageName != "" {
+			w.WriteString(packageName)
+			w.WriteByte('/')
+		}
 		w.WriteString(fileName.get())
 	}
-	if funcName.has() {
-		if fileName.has() {
-			w.WriteByte(':')
-		}
-		w.WriteString(funcName.get())
-	}
 	if lineNum.has() {
-		w.WriteByte('#')
+		w.WriteByte(':')
 		w.WriteString(strconv.Itoa(lineNum.get()))
 	}
 	out := w.String()

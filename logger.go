@@ -1,23 +1,22 @@
 package logx
 
 type Logger interface {
-	Trace(msg string, args ...arg)
-	Debug(msg string, args ...arg)
-	Info(msg string, args ...arg)
-	Warn(msg string, args ...arg)
-	Error(msg string, args ...arg)
-	Fatal(msg string, args ...arg)
-	Panic(msg string, args ...arg)
-	Tracef(format string, args ...any)
-	Debugf(format string, args ...any)
-	Infof(format string, args ...any)
-	Warnf(format string, args ...any)
-	Errorf(format string, args ...any)
-	Panicf(format string, args ...any)
-	Fatalf(format string, args ...any)
-	PanicBy(err error)
-	ErrorBy(err error)
-	FatalBy(err error)
-	WithPrefix(keyValues map[string]any) Logger
-	WithPrefix2(keyValues ...any) Logger
+	Trace(msg string, fields ...Field)
+	Debug(msg string, fields ...Field)
+	Info(msg string, fields ...Field)
+	Warn(msg string, fields ...Field)
+	Error(msg string, fields ...Field)
+	Fatal(msg string, fields ...Field)
+	Panic(msg string, fields ...Field)
+	Tracef(format string, fields ...any)
+	Debugf(format string, fields ...any)
+	Infof(format string, fields ...any)
+	Warnf(format string, fields ...any)
+	Errorf(format string, fields ...any)
+	Panicf(format string, fields ...any)
+	Fatalf(format string, fields ...any)
+	PanicWith(err error)
+	ErrorWith(err error)
+	FatalWith(err error)
+	WithFields(fields ...Field) Logger
 }

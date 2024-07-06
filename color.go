@@ -3,7 +3,8 @@ package logx
 import "github.com/fatih/color"
 
 const (
-	GreenAttr = iota
+	NoneAttr = iota
+	GreenAttr
 	YellowAttr
 	BlueAttr
 	RedAttr
@@ -18,6 +19,54 @@ const (
 	HiMagentaAttr
 	HiWhiteAttr
 )
+
+type colorAttri struct {
+	keyColor    *color.Color
+	stringColor *color.Color
+	boolColor   *color.Color
+	floatColor  *color.Color
+	numberColor *color.Color
+}
+
+type colorfulset struct {
+	enable bool
+	TextColorAttri
+	colorAttri
+}
+
+func (c *colorfulset) init() {
+	if !c.enable {
+		return
+	}
+	if c.KeyColor == 0 {
+		c.KeyColor = BlueAttr
+	}
+	if c.StringColor == 0 {
+		c.StringColor = GreenAttr
+	}
+	if c.BooleanColor == 0 {
+		c.BooleanColor = YellowAttr
+	}
+	if c.FloatColor == 0 {
+		c.FloatColor = CyanAttr
+	}
+	if c.NumberColor == 0 {
+		c.NumberColor = RedAttr
+	}
+	c.keyColor = colorMap[c.KeyColor]
+	c.stringColor = colorMap[c.StringColor]
+	c.boolColor = colorMap[c.BooleanColor]
+	c.floatColor = colorMap[c.FloatColor]
+	c.numberColor = colorMap[c.NumberColor]
+}
+
+type TextColorAttri struct {
+	KeyColor     uint8
+	StringColor  uint8
+	BooleanColor uint8
+	FloatColor   uint8
+	NumberColor  uint8
+}
 
 var (
 	colorMap = map[uint8]*color.Color{
