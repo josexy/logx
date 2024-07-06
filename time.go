@@ -8,46 +8,47 @@ import (
 
 type timeField struct {
 	enable bool
-	format func(t time.Time) any
+	fn     func(t time.Time) any
 	now    time.Time
 	color  bool
 }
 
-func (t *timeField) toArg() arg {
-	arg := arg{key: "time"}
-	switch val := t.Value(); val.(type) {
+func (t *timeField) format() Field {
+	var field Field
+	switch val := t.value(); val.(type) {
 	case string:
-		arg.typ = stringArg
-		arg.inner = innerArg{string: val.(string)}
+		field = String("time", val.(string))
 	case int64:
-		arg.typ = int64Arg
-		arg.inner = innerArg{int64: val.(int64)}
+		field = Int64("time", val.(int64))
 	default:
-		arg.typ = stringArg
-		arg.inner = innerArg{string: fmt.Sprintf("%v", val)}
+		if t, ok := val.(time.Time); ok {
+			field = Time("time", t)
+		} else {
+			field = String("time", fmt.Sprintf("%v", val))
+		}
 	}
-	return arg
+	return field
 }
 
-func (t *timeField) Value() (out any) {
+func (t *timeField) value() (out any) {
 	if !t.enable {
 		return
 	}
-	if t.format == nil {
+	if t.fn == nil {
 		return
 	}
-	out = t.format(t.now)
+	out = t.fn(t.now)
 	return
 }
 
 func (t *timeField) String() string {
-	arg := t.toArg()
+	field := t.format()
 	var out string
-	switch arg.typ {
-	case stringArg:
-		out = arg.inner.string
-	case int64Arg:
-		out = strconv.FormatInt(arg.inner.int64, 10)
+	switch field.Type {
+	case StringType:
+		out = field.StringValue
+	case Int64Type:
+		out = strconv.FormatInt(field.IntValue, 10)
 	}
 	if t.color && len(out) > 0 {
 		out = Blue(out)

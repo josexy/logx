@@ -1,7 +1,6 @@
 package logx
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -10,14 +9,32 @@ import (
 	"time"
 )
 
-type LoggerX struct {
-	mu        sync.Mutex
-	lockLevel LevelType
-	buf       *bytes.Buffer
-	logCtx    *logContext
+type WriteSyncer interface {
+	io.Writer
+	Sync() error
 }
 
-func (l *LoggerX) print(level LevelType, msg string, args ...arg) {
+type writerWrapper struct{ io.Writer }
+
+func (w writerWrapper) Sync() error { return nil }
+
+func AddSync(w io.Writer) WriteSyncer {
+	switch w := w.(type) {
+	case WriteSyncer:
+		return w
+	default:
+		return writerWrapper{w}
+	}
+}
+
+type LoggerX struct {
+	mu       sync.Mutex
+	logLevel LevelType
+	logCtx   *logContext
+	pool     sync.Pool
+}
+
+func (l *LoggerX) print(level LevelType, msg string, fields ...Field) {
 	// discard the log
 	if l.logCtx.writer == nil || l.logCtx.writer == io.Discard {
 		return
@@ -25,26 +42,26 @@ func (l *LoggerX) print(level LevelType, msg string, args ...arg) {
 	if l.skipLevelLog(level) {
 		return
 	}
-	l.output(level, msg, args...)
+	l.output(level, msg, fields...)
 }
 
-func (l *LoggerX) Trace(msg string, args ...arg) { l.print(LevelTrace, msg, args...) }
+func (l *LoggerX) Trace(msg string, fields ...Field) { l.print(LevelTrace, msg, fields...) }
 
-func (l *LoggerX) Debug(msg string, args ...arg) { l.print(LevelDebug, msg, args...) }
+func (l *LoggerX) Debug(msg string, fields ...Field) { l.print(LevelDebug, msg, fields...) }
 
-func (l *LoggerX) Info(msg string, args ...arg) { l.print(LevelInfo, msg, args...) }
+func (l *LoggerX) Info(msg string, fields ...Field) { l.print(LevelInfo, msg, fields...) }
 
-func (l *LoggerX) Warn(msg string, args ...arg) { l.print(LevelWarn, msg, args...) }
+func (l *LoggerX) Warn(msg string, fields ...Field) { l.print(LevelWarn, msg, fields...) }
 
-func (l *LoggerX) Error(msg string, args ...arg) { l.print(LevelError, msg, args...) }
+func (l *LoggerX) Error(msg string, fields ...Field) { l.print(LevelError, msg, fields...) }
 
-func (l *LoggerX) Fatal(msg string, args ...arg) {
-	l.print(LevelFatal, msg, args...)
+func (l *LoggerX) Fatal(msg string, fields ...Field) {
+	l.print(LevelFatal, msg, fields...)
 	os.Exit(1)
 }
 
-func (l *LoggerX) Panic(msg string, args ...arg) {
-	l.print(LevelPanic, msg, args...)
+func (l *LoggerX) Panic(msg string, fields ...Field) {
+	l.print(LevelPanic, msg, fields...)
 	panic(msg)
 }
 
@@ -56,9 +73,13 @@ func (l *LoggerX) Debugf(format string, args ...any) {
 	l.print(LevelDebug, fmt.Sprintf(format, args...))
 }
 
-func (l *LoggerX) Infof(format string, args ...any) { l.print(LevelInfo, fmt.Sprintf(format, args...)) }
+func (l *LoggerX) Infof(format string, args ...any) {
+	l.print(LevelInfo, fmt.Sprintf(format, args...))
+}
 
-func (l *LoggerX) Warnf(format string, args ...any) { l.print(LevelWarn, fmt.Sprintf(format, args...)) }
+func (l *LoggerX) Warnf(format string, args ...any) {
+	l.print(LevelWarn, fmt.Sprintf(format, args...))
+}
 
 func (l *LoggerX) Errorf(format string, args ...any) {
 	l.print(LevelError, fmt.Sprintf(format, args...))
@@ -75,7 +96,7 @@ func (l *LoggerX) Panicf(format string, args ...any) {
 	panic(value)
 }
 
-func (l *LoggerX) ErrorBy(err error) {
+func (l *LoggerX) ErrorWith(err error) {
 	value := "<nil>"
 	if err != nil {
 		value = err.Error()
@@ -83,7 +104,7 @@ func (l *LoggerX) ErrorBy(err error) {
 	l.print(LevelError, value)
 }
 
-func (l *LoggerX) PanicBy(err error) {
+func (l *LoggerX) PanicWith(err error) {
 	if err == nil {
 		return
 	}
@@ -91,7 +112,7 @@ func (l *LoggerX) PanicBy(err error) {
 	panic(err)
 }
 
-func (l *LoggerX) FatalBy(err error) {
+func (l *LoggerX) FatalWith(err error) {
 	if err == nil {
 		return
 	}
@@ -100,49 +121,15 @@ func (l *LoggerX) FatalBy(err error) {
 }
 
 func (l *LoggerX) skipLevelLog(expect LevelType) bool {
-	return l.lockLevel > expect
+	return l.logLevel > expect
 }
 
-func (l *LoggerX) WithPrefix(keyValues map[string]any) Logger {
-	if keyValues == nil {
-		l.logCtx.preKeyValues = nil
-		return l
-	}
-	if len(keyValues) > 0 {
-		l.logCtx.preKeyValues = make([]Pair, 0, len(keyValues))
-		for k, v := range keyValues {
-			l.logCtx.preKeyValues = append(l.logCtx.preKeyValues, Pair{
-				Key:   k,
-				Value: v,
-			})
-		}
-	}
+func (l *LoggerX) WithFields(fields ...Field) Logger {
+	l.logCtx.WithFields(fields...)
 	return l
 }
 
-func (l *LoggerX) WithPrefix2(keyValues ...any) Logger {
-	if len(keyValues) == 0 {
-		l.logCtx.preKeyValues = nil
-		return l
-	}
-	if len(keyValues)%2 != 0 {
-		return l
-	}
-	l.logCtx.preKeyValues = make([]Pair, 0, len(keyValues))
-	for i := 0; i < len(keyValues); i += 2 {
-		key, ok := keyValues[i].(string)
-		if !ok {
-			continue
-		}
-		l.logCtx.preKeyValues = append(l.logCtx.preKeyValues, Pair{
-			Key:   key,
-			Value: keyValues[i+1],
-		})
-	}
-	return l
-}
-
-func (l *LoggerX) output(level LevelType, msg string, args ...arg) {
+func (l *LoggerX) output(level LevelType, msg string, fields ...Field) {
 	if l.logCtx.encoder == nil {
 		return
 	}
@@ -157,20 +144,17 @@ func (l *LoggerX) output(level LevelType, msg string, args ...arg) {
 		l.logCtx.levelField.typ = level
 	}
 
-	// reset the buffer
-	l.buf.Reset()
+	buf := l.pool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer l.pool.Put(buf)
 
-	if err := l.logCtx.encoder.Encode(l.buf, msg, args...); err != nil {
+	if err := l.logCtx.encoder.Encode(buf, msg, fields...); err != nil {
 		return
 	}
 
-	if l.buf.Len() > 0 && l.buf.Bytes()[l.buf.Len()-1] != '\n' {
-		l.buf.WriteByte('\n')
+	if buf.Len() > 0 && buf.Bytes()[buf.Len()-1] != '\n' {
+		buf.WriteByte('\n')
 	}
-	_, _ = l.logCtx.writer.Write(l.buf.Bytes())
-
-	// for file writer, need to flush the buffer data to file
-	if flusher, ok := l.logCtx.writer.(*bufio.Writer); ok {
-		flusher.Flush()
-	}
+	l.logCtx.writer.Write(buf.Bytes())
+	l.logCtx.writer.Sync()
 }
