@@ -7,31 +7,31 @@ import (
 var ConsoleEncoderSplitCharacter = byte('\t')
 
 type ConsoleEncoder struct {
-	*logContext
+	*LogContext
 	jsonEncoder *JsonEncoder
 }
 
 func (enc *ConsoleEncoder) Init() {
 	enc.jsonEncoder = &JsonEncoder{
-		logContext: enc.logContext,
+		LogContext: enc.LogContext,
 	}
 	enc.jsonEncoder.Init()
-	if enc.callerField.enable {
-		enc.callerField.skipDepth = 6
+	if enc.callerF.enable {
+		enc.callerF.skipDepth = 6
 	}
 }
 
 func (enc *ConsoleEncoder) Encode(buf *bytes.Buffer, msg string, fields ...Field) error {
-	if enc.timeField.enable {
-		buf.WriteString(enc.timeField.String())
+	if enc.timeF.enable {
+		buf.WriteString(enc.timeF.String())
 		buf.WriteByte(ConsoleEncoderSplitCharacter)
 	}
-	if enc.levelField.enable {
-		buf.WriteString(enc.levelField.String())
+	if enc.levelF.enable {
+		buf.WriteString(enc.levelF.String())
 		buf.WriteByte(ConsoleEncoderSplitCharacter)
 	}
-	if enc.callerField.enable && (enc.callerField.fileName || enc.callerField.funcName || enc.callerField.lineNum) {
-		buf.WriteString(enc.callerField.String())
+	if enc.callerF.enable && (enc.callerF.fileName || enc.callerF.funcName || enc.callerF.lineNum) {
+		buf.WriteString(enc.callerF.String())
 		buf.WriteByte(ConsoleEncoderSplitCharacter)
 	}
 

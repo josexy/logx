@@ -19,6 +19,9 @@ type writerWrapper struct{ io.Writer }
 func (w writerWrapper) Sync() error { return nil }
 
 func AddSync(w io.Writer) WriteSyncer {
+	if w == nil {
+		return nil
+	}
 	switch w := w.(type) {
 	case WriteSyncer:
 		return w
@@ -30,7 +33,7 @@ func AddSync(w io.Writer) WriteSyncer {
 type LoggerX struct {
 	mu       sync.Mutex
 	logLevel LevelType
-	logCtx   *logContext
+	logCtx   *LogContext
 	pool     sync.Pool
 }
 
@@ -130,25 +133,25 @@ func (l *LoggerX) WithFields(fields ...Field) Logger {
 }
 
 func (l *LoggerX) output(level LevelType, msg string, fields ...Field) {
-	if l.logCtx.encoder == nil {
+	if l.logCtx.enc == nil {
 		return
 	}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if l.logCtx.timeField.enable {
-		l.logCtx.timeField.now = time.Now()
+	if l.logCtx.timeF.enable {
+		l.logCtx.timeF.now = time.Now()
 	}
-	if l.logCtx.levelField.enable {
-		l.logCtx.levelField.typ = level
+	if l.logCtx.levelF.enable {
+		l.logCtx.levelF.typ = level
 	}
 
 	buf := l.pool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer l.pool.Put(buf)
 
-	if err := l.logCtx.encoder.Encode(buf, msg, fields...); err != nil {
+	if err := l.logCtx.enc.Encode(buf, msg, fields...); err != nil {
 		return
 	}
 

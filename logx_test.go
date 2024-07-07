@@ -2,23 +2,27 @@ package logx
 
 import (
 	"errors"
+	"io"
 	"log"
 	"log/slog"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/fatih/color"
 )
 
-func TestSimpleLogger(t *testing.T) {
-	logger := NewLogContext().
+func TestConsoleLogger(t *testing.T) {
+	logCtx := NewLogContext().
 		WithColorfulset(true, TextColorAttri{}).
 		WithLevel(true, false).
 		WithCaller(true, true, true, true).
 		WithWriter(AddSync(color.Output)).
-		WithTime(true, func(t time.Time) any { return t.Format(time.DateTime) }).
-		WithEncoder(Console).BuildConsoleLogger(LevelTrace)
+		WithFields(String("arch", runtime.GOARCH), Bool("bool", true)).
+		WithTime(true, nil).
+		WithEncoder(Console)
 
+	logger := logCtx.BuildConsoleLogger(LevelTrace)
 	logger.Debug("")
 	logger.Debug("this is a debug message")
 	logger.Info("this is an info message")
@@ -26,21 +30,56 @@ func TestSimpleLogger(t *testing.T) {
 	logger.Error("this is an error message")
 	logger.Debugf("hello %s", "golang")
 	logger.Infof("time :%v", time.Now())
+	logger.Errorf("this is an error message: %v", io.EOF)
 	logger.ErrorWith(errors.New("error"))
+
+	logger.Debug("debug", String("os", runtime.GOOS), Time("ts", time.Now()))
+	func() {
+		logger.Info("info", String("os", runtime.GOOS), Time("ts", time.Now()))
+	}()
+	func() {
+		defer func() {
+			if err := recover(); err != nil {
+				t.Logf("panic: %v", err)
+			}
+		}()
+		logger.Panic("panic", Int("code", 255))
+	}()
+
+	newLogCtx := logCtx.Copy().WithTime(false, nil).WithCaller(false, false, false, false).WithEncoder(Json)
+	newLogger := newLogCtx.BuildConsoleLogger(LevelInfo)
+	newLogger.Trace("trace", Time("ts", time.Now()))
+	newLogger.Debugf("debug")
+	newLogger.Info("info", Time("ts", time.Now()))
+	newLogger.ErrorWith(io.EOF)
+
+	newLogCtx.WithLevel(true, true).WithFields()
+
+	newLogger2 := newLogCtx.Copy().WithTime(true, nil).WithLevel(true, false).WithEncoder(Console).BuildConsoleLogger(LevelInfo)
+	newLogger.Info("info", Time("ts", time.Now()))
+	newLogger2.Info("info", Time("ts", time.Now()))
 }
 
 func TestJsonLogger(t *testing.T) {
 	logger := NewLogContext().
 		WithColorfulset(true, TextColorAttri{}).
+		WithFields(String("os", runtime.GOOS), String("arch", runtime.GOARCH)).
 		WithLevel(true, true).
 		WithCaller(true, true, true, true).
 		WithWriter(AddSync(color.Output)).
 		WithTime(true, func(t time.Time) any { return t.Format(time.DateTime) }).
-		WithEncoder(Json).BuildConsoleLogger(LevelTrace)
+		WithEncoder(Json).
+		BuildConsoleLogger(LevelTrace)
 
-	logger.Debug("this is a debug message",
+	logger.Trace("this is a trace message")
+	logger.Debug("this is a debug message")
+	logger.Info("this is an info message")
+	logger.Warn("this is a warning message")
+	logger.Error("this is an error message")
+	logger.Info("this is a info message",
 		String("string", "string"),
 		Bool("bool", false),
+		Bool("bool2", true),
 		Int8("int8", 10),
 		Int16("int16", -20),
 		Int32("int32", -30),
@@ -57,9 +96,6 @@ func TestJsonLogger(t *testing.T) {
 		Duration("duration", time.Duration(time.Hour+30*time.Minute+40*time.Second)),
 		Error("err", errors.New("error message")),
 		Error("err2", nil),
-		Array("slice", []any{100, "hello", time.Now(), false, 10.2223, nil}),
-		Object("map2"),
-		Array("slice2", nil),
 		String("a", `"message"`),
 		String("b", `"message`),
 		String("c", `message"`),
@@ -73,18 +109,38 @@ func TestJsonLogger(t *testing.T) {
 		Any("any2", time.Now()),
 		Any("any3", &struct{ k, v string }{k: "key", v: "value"}),
 		Any("any4", logger),
+		Any("any5", "\"xxx\""),
+		Any("any6", `"""`),
+		ArrayT("slice1",
+			Object("z", Bool("b", false)),
+			Object("a", String("b", "b")), Array("b", true, 20), ArrayT("c", "c", "c")),
+		ArrayT("slice2", 110, 20, 300, 1000),
+		Array("slice3", true, nil, false, 112233, 1122.33, "hello world", time.Now(), nil, io.EOF),
+		Array("slice4", []string{"hello", "world", "golang"}),
+		Array("slice5", "hello", []int{10, 20, 30, 40}, []bool{false, true, false}),
+		Array("slice6", []struct {
+			string
+			int
+		}{{"hello", 10}, {"world", 20}}),
+		Object("object1", Bool("bool", false), String("string", "string"), Int("integer", 100)),
+		Object("object2", Time("time", time.Now()), UInt32("uint32", 88999), Error("err", io.EOF),
+			Error("err2", nil), Duration("duration", time.Millisecond*200), Float64("float64", 11.2222223)),
+		Object("object3", Array("arr1", "str", 123, false, time.Now().Add(time.Hour)),
+			Object("obj", Object("obj2", Array("arr", "xx", 12000), Object("obj3", Int("int", 2222))))),
 	)
+	logger.Info("info",
+		Object("obj"),
+		Array("arr"), ArrayT("arr2", io.EOF, nil, io.ErrShortBuffer))
 
-	logger.Info(`"hello" \n "\n"`)
-	logger.Info("")
-	logger.Info("this is an info message")
-	logger.Warn("this is a warning message")
-	logger.Error("this is an error message")
-	logger.Debugf("hello %s", "golang")
-	logger.Infof("time :%v", time.Now())
-	logger.ErrorWith(errors.New("error"))
-	// logger.Panic("this is a panic message")
-	// logger.Fatal("this is a fatal message")
+	logger.Trace("trace", Array("arr",
+		ArrayT("arr1", ArrayT("arr2", ArrayT("arr3", Array("arr5", 666)))),
+		Array("arr1", 100, 200, ArrayT("x", 10, 20, 30), ArrayT("y", "ff", "gg"), Object("xx", String("xx", "ttt"))),
+		Array("arr2",
+			ArrayT("arr3", Array("arr4", false, 1.11), Array("arr5", 20, "hello", true)),
+			200, "hello",
+		)))
+	logger.Trace("trace", Object("obj", Object("obj2", Object("obj3"))))
+	logger.Infof("hello %s", "world")
 }
 
 type nullWriter struct{}

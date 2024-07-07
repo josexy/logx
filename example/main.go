@@ -16,6 +16,7 @@ func main() {
 		WithLevel(true, true).
 		WithCaller(true, true, true, true).
 		WithWriter(logx.AddSync(color.Output)).
+		// WithWriter(logx.AddSync(nil)).
 		WithEncoder(logx.Console).
 		WithTime(true, func(t time.Time) any { return t.Format(time.DateTime) })
 
@@ -87,7 +88,7 @@ func main() {
 		logx.ArrayT("slice2", 110, 20, 300, 1000),
 		logx.Array("slice3", true, nil, false, 112233, 1122.33, "hello world", time.Now(), nil, io.EOF),
 		logx.Array("slice4", []string{"hello", "world", "golang"}),
-		logx.Array("slice5", []int{10, 20, 30, 40}),
+		logx.Array("slice5", "hello", []int{10, 20, 30, 40}, []bool{false, true, false}),
 		logx.Array("slice6", []struct {
 			string
 			int
@@ -114,5 +115,4 @@ func main() {
 
 	loggerSimple.Error("this is an error message")
 	loggerSimple.Tracef("hello %s", "world")
-
 }

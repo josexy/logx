@@ -10,7 +10,7 @@ import (
 )
 
 type JsonEncoder struct {
-	*logContext
+	*LogContext
 	buf          *bytes.Buffer
 	fieldsRanger sliceFields
 }
@@ -18,10 +18,10 @@ type JsonEncoder struct {
 func (enc *JsonEncoder) Init() {
 	enc.fieldsRanger = sliceFields{fields: make([]Field, 0, 64)}
 
-	if enc.callerField.enable {
-		enc.callerField.skipDepth = 7
+	if enc.callerF.enable {
+		enc.callerF.skipDepth = 7
 	}
-	enc.colorfulset.init()
+	enc.colors.init()
 }
 
 func (enc *JsonEncoder) Encode(buf *bytes.Buffer, msg string, fields ...Field) error {
@@ -49,14 +49,14 @@ func (enc *JsonEncoder) writeBeginArray() { enc.buf.WriteByte('[') }
 func (enc *JsonEncoder) writeEndArray() { enc.buf.WriteByte(']') }
 
 func (enc *JsonEncoder) addPromptFields() {
-	if enc.levelField.enable {
-		enc.fieldsRanger.put(enc.levelField.format())
+	if enc.levelF.enable {
+		enc.fieldsRanger.put(enc.levelF.format())
 	}
-	if enc.timeField.enable {
-		enc.fieldsRanger.put(enc.timeField.format())
+	if enc.timeF.enable {
+		enc.fieldsRanger.put(enc.timeF.format())
 	}
-	if enc.callerField.enable && (enc.callerField.fileName || enc.callerField.funcName || enc.callerField.lineNum) {
-		enc.fieldsRanger.put(enc.callerField.format())
+	if enc.callerF.enable && (enc.callerF.fileName || enc.callerF.funcName || enc.callerF.lineNum) {
+		enc.fieldsRanger.put(enc.callerF.format())
 	}
 }
 
@@ -72,8 +72,8 @@ func (enc *JsonEncoder) writeSplitComma() {
 }
 
 func (enc *JsonEncoder) wrapKey(key string) string {
-	if enc.colorfulset.enable && enc.colorAttri.keyColor != nil {
-		return enc.colorAttri.keyColor.Sprint(key)
+	if enc.colors.enable && enc.colors.colorAttri.keyColor != nil {
+		return enc.colors.colorAttri.keyColor.Sprint(key)
 	}
 	return key
 }
@@ -146,29 +146,29 @@ func (enc *JsonEncoder) writeField(field Field) error {
 }
 
 func (enc *JsonEncoder) wrapString(value string) string {
-	if enc.colorfulset.enable && enc.colorAttri.stringColor != nil {
-		return enc.colorAttri.stringColor.Sprint(value)
+	if enc.colors.enable && enc.colors.colorAttri.stringColor != nil {
+		return enc.colors.colorAttri.stringColor.Sprint(value)
 	}
 	return value
 }
 
 func (enc *JsonEncoder) wrapBool(value string) string {
-	if enc.colorfulset.enable && enc.colorAttri.boolColor != nil {
-		return enc.colorAttri.boolColor.Sprint(value)
+	if enc.colors.enable && enc.colors.colorAttri.boolColor != nil {
+		return enc.colors.colorAttri.boolColor.Sprint(value)
 	}
 	return value
 }
 
 func (enc *JsonEncoder) wrapFloat(value string) string {
-	if enc.colorfulset.enable && enc.colorAttri.floatColor != nil {
-		return enc.colorAttri.floatColor.Sprint(value)
+	if enc.colors.enable && enc.colors.colorAttri.floatColor != nil {
+		return enc.colors.colorAttri.floatColor.Sprint(value)
 	}
 	return value
 }
 
 func (enc *JsonEncoder) wrapNumber(value string) string {
-	if enc.colorfulset.enable && enc.colorAttri.numberColor != nil {
-		return enc.colorAttri.numberColor.Sprint(value)
+	if enc.colors.enable && enc.colors.colorAttri.numberColor != nil {
+		return enc.colors.colorAttri.numberColor.Sprint(value)
 	}
 	return value
 }

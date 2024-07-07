@@ -30,7 +30,7 @@ type colorAttri struct {
 
 type colorfulset struct {
 	enable bool
-	TextColorAttri
+	attr   TextColorAttri
 	colorAttri
 }
 
@@ -38,26 +38,26 @@ func (c *colorfulset) init() {
 	if !c.enable {
 		return
 	}
-	if c.KeyColor == 0 {
-		c.KeyColor = BlueAttr
+	if c.attr.KeyColor == 0 {
+		c.attr.KeyColor = BlueAttr
 	}
-	if c.StringColor == 0 {
-		c.StringColor = GreenAttr
+	if c.attr.StringColor == 0 {
+		c.attr.StringColor = GreenAttr
 	}
-	if c.BooleanColor == 0 {
-		c.BooleanColor = YellowAttr
+	if c.attr.BooleanColor == 0 {
+		c.attr.BooleanColor = YellowAttr
 	}
-	if c.FloatColor == 0 {
-		c.FloatColor = CyanAttr
+	if c.attr.FloatColor == 0 {
+		c.attr.FloatColor = CyanAttr
 	}
-	if c.NumberColor == 0 {
-		c.NumberColor = RedAttr
+	if c.attr.NumberColor == 0 {
+		c.attr.NumberColor = RedAttr
 	}
-	c.keyColor = colorMap[c.KeyColor]
-	c.stringColor = colorMap[c.StringColor]
-	c.boolColor = colorMap[c.BooleanColor]
-	c.floatColor = colorMap[c.FloatColor]
-	c.numberColor = colorMap[c.NumberColor]
+	c.keyColor = colorMap[c.attr.KeyColor]
+	c.stringColor = colorMap[c.attr.StringColor]
+	c.boolColor = colorMap[c.attr.BooleanColor]
+	c.floatColor = colorMap[c.attr.FloatColor]
+	c.numberColor = colorMap[c.attr.NumberColor]
 }
 
 type TextColorAttri struct {

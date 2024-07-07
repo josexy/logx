@@ -7,27 +7,29 @@ import (
 	"time"
 )
 
-type logContext struct {
-	levelField
-	timeField
-	callerField
-	encoder
-	colorfulset
+type LogContext struct {
+	levelF      levelField
+	timeF       timeField
+	callerF     callerField
+	enc         encoder
+	colors      colorfulset
 	writer      WriteSyncer
 	preFields   []Field
 	escapeQuote bool
 }
 
-func NewLogContext() *logContext {
-	return &logContext{}
+func NewLogContext() *LogContext {
+	return &LogContext{}
 }
 
-func (lc *logContext) Copy() *logContext {
-	newLogCtx := new(logContext)
+func (lc *LogContext) Copy() *LogContext {
+	newLogCtx := new(LogContext)
 	*newLogCtx = *lc
-	newLogCtx.preFields = make([]Field, 0, len(lc.preFields))
-	newLogCtx.preFields = append(newLogCtx.preFields, lc.preFields...)
-	switch lc.encoder.(type) {
+	if len(lc.preFields) > 0 {
+		newLogCtx.preFields = make([]Field, 0, len(lc.preFields))
+		newLogCtx.preFields = append(newLogCtx.preFields, lc.preFields...)
+	}
+	switch lc.enc.(type) {
 	case *JsonEncoder:
 		newLogCtx = newLogCtx.WithEncoder(Json)
 	case *ConsoleEncoder:
@@ -36,70 +38,70 @@ func (lc *logContext) Copy() *logContext {
 	return newLogCtx
 }
 
-func (lc *logContext) WithFields(fields ...Field) *logContext {
+func (lc *LogContext) WithFields(fields ...Field) *LogContext {
 	lc.preFields = fields
 	return lc
 }
 
-func (lc *logContext) WithColorfulset(enable bool, attr TextColorAttri) *logContext {
-	lc.levelField.color = enable
-	lc.timeField.color = enable
-	lc.callerField.color = enable
-	lc.colorfulset.enable = enable
-	lc.colorfulset.TextColorAttri = attr
+func (lc *LogContext) WithColorfulset(enable bool, attr TextColorAttri) *LogContext {
+	lc.levelF.color = enable
+	lc.timeF.color = enable
+	lc.callerF.color = enable
+	lc.colors.enable = enable
+	lc.colors.attr = attr
 	return lc
 }
 
-func (lc *logContext) WithLevel(enable, lower bool) *logContext {
-	lc.levelField.enable = enable
-	lc.levelField.lower = lower
+func (lc *LogContext) WithLevel(enable, lower bool) *LogContext {
+	lc.levelF.enable = enable
+	lc.levelF.lower = lower
 	return lc
 }
 
-func (lc *logContext) WithTime(enable bool, format func(time.Time) any) *logContext {
+func (lc *LogContext) WithTime(enable bool, format func(time.Time) any) *LogContext {
 	if format == nil {
 		format = func(t time.Time) any {
 			return t.Format(time.RFC3339)
 		}
 	}
-	lc.timeField.enable = enable
-	lc.timeField.fn = format
+	lc.timeF.enable = enable
+	lc.timeF.fn = format
 	return lc
 }
 
-func (lc *logContext) WithCaller(enable, fileName, funcName, lineNumber bool) *logContext {
-	lc.callerField.enable = enable
-	lc.callerField.fileName = fileName
-	lc.callerField.funcName = funcName
-	lc.callerField.lineNum = lineNumber
+func (lc *LogContext) WithCaller(enable, fileName, funcName, lineNumber bool) *LogContext {
+	lc.callerF.enable = enable
+	lc.callerF.fileName = fileName
+	lc.callerF.funcName = funcName
+	lc.callerF.lineNum = lineNumber
 	return lc
 }
 
-func (lc *logContext) WithEscapeQuote(enable bool) *logContext {
+func (lc *LogContext) WithEscapeQuote(enable bool) *LogContext {
 	lc.escapeQuote = enable
 	return lc
 }
 
-func (lc *logContext) WithWriter(writer WriteSyncer) *logContext {
+func (lc *LogContext) WithWriter(writer WriteSyncer) *LogContext {
 	lc.writer = writer
 	return lc
 }
 
-func (lc *logContext) WithEncoder(encoder EncoderType) *logContext {
+func (lc *LogContext) WithEncoder(encoder EncoderType) *LogContext {
 	switch encoder {
 	case Console:
-		lc.encoder = &ConsoleEncoder{logContext: lc}
+		lc.enc = &ConsoleEncoder{LogContext: lc}
 	case Json:
-		lc.encoder = &JsonEncoder{logContext: lc}
+		lc.enc = &JsonEncoder{LogContext: lc}
 	default:
 		panic("not support other log encoder")
 	}
 	return lc
 }
 
-func (lc *logContext) BuildConsoleLogger(level LevelType) Logger {
-	if lc.encoder != nil {
-		lc.encoder.Init()
+func (lc *LogContext) BuildConsoleLogger(level LevelType) Logger {
+	if lc.enc != nil {
+		lc.enc.Init()
 	}
 	return &LoggerX{
 		logCtx:   lc,
@@ -110,11 +112,11 @@ func (lc *logContext) BuildConsoleLogger(level LevelType) Logger {
 	}
 }
 
-func (lc *logContext) BuildFileLogger(level LevelType, writer io.Writer) Logger {
+func (lc *LogContext) BuildFileLogger(level LevelType, writer io.Writer) Logger {
 	// For file logger, need to disable color attributes
 	lc = lc.WithColorfulset(false, TextColorAttri{}).WithWriter(AddSync(writer))
-	if lc.encoder != nil {
-		lc.encoder.Init()
+	if lc.enc != nil {
+		lc.enc.Init()
 	}
 	return &LoggerX{
 		logCtx:   lc,
