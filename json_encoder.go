@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 	"time"
 	"unsafe"
@@ -285,64 +286,80 @@ func (enc *JsonEncoder) writeFieldSingleObject(value Field) {
 }
 
 func (enc *JsonEncoder) writeFieldArray(value any) {
-	enc.writeBeginArray()
 	enc.writeFieldAny(value)
-	enc.writeEndArray()
 }
 
 func (enc *JsonEncoder) writeFieldNil() {
 	enc.buf.WriteString(enc.wrapString("null"))
 }
 
-func writeFieldArrayListFor[T any](value []T, wf func(T), lf func()) {
+func writeFieldArrayListFor[T any](value []T, enc *JsonEncoder, wf func(T), lf func()) {
+	enc.writeBeginArray()
 	for i := 0; i < len(value); i++ {
 		wf(value[i])
 		if i+1 != len(value) {
 			lf()
 		}
 	}
+	enc.writeEndArray()
+}
+
+func writeFieldArrayListForReflectValue(value reflect.Value, enc *JsonEncoder, wf func(any), lf func()) {
+	enc.writeBeginArray()
+	n := value.Len()
+	for i := 0; i < n; i++ {
+		idxv := value.Index(i)
+		if !idxv.CanInterface() {
+			continue
+		}
+		wf(idxv.Interface())
+		if i+1 != n {
+			lf()
+		}
+	}
+	enc.writeEndArray()
 }
 
 func (enc *JsonEncoder) writeFieldAny(value any) {
 	switch v := value.(type) {
 	case []string:
-		writeFieldArrayListFor(v, func(s string) { enc.writeFieldString(s, true) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s string) { enc.writeFieldString(s, true) }, enc.writeSplitComma)
 	case []bool:
-		writeFieldArrayListFor(v, func(s bool) { enc.writeFieldBool(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s bool) { enc.writeFieldBool(s) }, enc.writeSplitComma)
 	case []int8:
-		writeFieldArrayListFor(v, func(s int8) { enc.writeFieldInt8(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s int8) { enc.writeFieldInt8(s) }, enc.writeSplitComma)
 	case []int16:
-		writeFieldArrayListFor(v, func(s int16) { enc.writeFieldInt16(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s int16) { enc.writeFieldInt16(s) }, enc.writeSplitComma)
 	case []int32:
-		writeFieldArrayListFor(v, func(s int32) { enc.writeFieldInt32(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s int32) { enc.writeFieldInt32(s) }, enc.writeSplitComma)
 	case []int64:
-		writeFieldArrayListFor(v, func(s int64) { enc.writeFieldInt64(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s int64) { enc.writeFieldInt64(s) }, enc.writeSplitComma)
 	case []int:
-		writeFieldArrayListFor(v, func(s int) { enc.writeFieldInt(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s int) { enc.writeFieldInt(s) }, enc.writeSplitComma)
 	case []uint8:
-		writeFieldArrayListFor(v, func(s uint8) { enc.writeFieldUint8(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s uint8) { enc.writeFieldUint8(s) }, enc.writeSplitComma)
 	case []uint16:
-		writeFieldArrayListFor(v, func(s uint16) { enc.writeFieldUint16(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s uint16) { enc.writeFieldUint16(s) }, enc.writeSplitComma)
 	case []uint32:
-		writeFieldArrayListFor(v, func(s uint32) { enc.writeFieldUint32(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s uint32) { enc.writeFieldUint32(s) }, enc.writeSplitComma)
 	case []uint64:
-		writeFieldArrayListFor(v, func(s uint64) { enc.writeFieldUint64(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s uint64) { enc.writeFieldUint64(s) }, enc.writeSplitComma)
 	case []uint:
-		writeFieldArrayListFor(v, func(s uint) { enc.writeFieldUint(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s uint) { enc.writeFieldUint(s) }, enc.writeSplitComma)
 	case []float32:
-		writeFieldArrayListFor(v, func(s float32) { enc.writeFieldFloat32(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s float32) { enc.writeFieldFloat32(s) }, enc.writeSplitComma)
 	case []float64:
-		writeFieldArrayListFor(v, func(s float64) { enc.writeFieldFloat64(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s float64) { enc.writeFieldFloat64(s) }, enc.writeSplitComma)
 	case []time.Time:
-		writeFieldArrayListFor(v, func(s time.Time) { enc.writeFieldTime(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s time.Time) { enc.writeFieldTime(s) }, enc.writeSplitComma)
 	case []time.Duration:
-		writeFieldArrayListFor(v, func(s time.Duration) { enc.writeFieldDuration(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s time.Duration) { enc.writeFieldDuration(s) }, enc.writeSplitComma)
 	case []error:
-		writeFieldArrayListFor(v, func(s error) { enc.writeFieldError(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s error) { enc.writeFieldError(s) }, enc.writeSplitComma)
 	case []Field:
 		enc.writeFieldObject(v)
 	case []any:
-		writeFieldArrayListFor(v, func(s any) { enc.writeFieldAny(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s any) { enc.writeFieldAny(s) }, enc.writeSplitComma)
 	case string:
 		enc.writeFieldString(v, true)
 	case bool:
@@ -382,7 +399,12 @@ func (enc *JsonEncoder) writeFieldAny(value any) {
 	case nil:
 		enc.writeFieldNil()
 	default:
-		enc.writeFieldString(fmt.Sprintf("%+v", value), true)
+		if enc.reflectValue && reflect.TypeOf(value).Kind() == reflect.Slice {
+			valueOf := reflect.ValueOf(value)
+			writeFieldArrayListForReflectValue(valueOf, enc, enc.writeFieldAny, enc.writeSplitComma)
+		} else {
+			enc.writeFieldString(fmt.Sprintf("%v", value), true)
+		}
 	}
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"io"
+	"net/netip"
 	"runtime"
 	"time"
 
@@ -40,6 +41,7 @@ func main() {
 
 	loggerJson := logCtx.
 		WithEncoder(logx.Console).
+		WithReflectValue(true).
 		WithFields(logx.String("os", runtime.GOOS), logx.String("arch", runtime.GOARCH)).
 		BuildConsoleLogger(logx.LevelTrace)
 	loggerJson.Trace("this is a trace message")
@@ -104,14 +106,33 @@ func main() {
 		logx.Array("arr"), logx.ArrayT("arr2", io.EOF, nil, io.ErrShortBuffer))
 
 	loggerJson.Trace("trace", logx.Array("arr",
-		logx.ArrayT("arr1", logx.ArrayT("arr2", logx.ArrayT("arr3", logx.Array("arr5", 666)))),
+		logx.ArrayT("arr1", logx.ArrayT("arr2", logx.ArrayT("arr3", logx.Array("arr5", 666, "hello", true)))),
 		logx.Array("arr1", 100, 200, logx.ArrayT("x", 10, 20, 30), logx.ArrayT("y", "ff", "gg"), logx.Object("xx", logx.String("xx", "ttt"))),
 		logx.Array("arr2",
 			logx.ArrayT("arr3", logx.Array("arr4", false, 1.11), logx.Array("arr5", 20, "hello", true)),
-			200, "hello",
+			200, []int{20, 30, 40}, "hello",
+			[]string{"11", "22"},
 		)))
 	loggerJson.Trace("trace", logx.Object("obj", logx.Object("obj2", logx.Object("obj3"))))
 	loggerJson.Infof("hello %s", "world")
+
+	list := []netip.Addr{netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("2.2.2.2")}
+	loggerJson.Info("info", logx.ArrayT("arr", list))
+	loggerJson.Info("info", logx.ArrayT("arr", list...))
+	loggerJson.Info("info", logx.Array("arr", list))
+	loggerJson.Info("info", logx.Any("any", list))
+
+	loggerJson.Info("info", logx.Array("arr",
+		[]int{10, 20, 30},
+		10, 20,
+		list,
+		1222, false, true,
+		logx.ArrayT("arr", list),
+		logx.ArrayT("arr", list...),
+		logx.Array("arr", list),
+		logx.Any("arr", list),
+		netip.MustParseAddr("8.8.8.8"),
+	))
 
 	loggerSimple.Error("this is an error message")
 	loggerSimple.Tracef("hello %s", "world")

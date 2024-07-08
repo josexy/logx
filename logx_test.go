@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"net/netip"
 	"runtime"
 	"testing"
 	"time"
@@ -69,6 +70,7 @@ func TestJsonLogger(t *testing.T) {
 		WithWriter(AddSync(color.Output)).
 		WithTime(true, func(t time.Time) any { return t.Format(time.DateTime) }).
 		WithEncoder(Json).
+		WithReflectValue(true).
 		BuildConsoleLogger(LevelTrace)
 
 	logger.Trace("this is a trace message")
@@ -139,6 +141,15 @@ func TestJsonLogger(t *testing.T) {
 			ArrayT("arr3", Array("arr4", false, 1.11), Array("arr5", 20, "hello", true)),
 			200, "hello",
 		)))
+	logger.Info("info", ArrayT("ips",
+		[]netip.Addr{netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("2.1.1.1")},
+		[]netip.Addr{netip.MustParseAddr("2.2.2.2")},
+	))
+	logger.Info("info", Array("ips",
+		netip.MustParseAddr("8.8.8.8"),
+		[]netip.Addr{netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("2.1.1.1")},
+		[]netip.Addr{netip.MustParseAddr("2.2.2.2")},
+	))
 	logger.Trace("trace", Object("obj", Object("obj2", Object("obj3"))))
 	logger.Infof("hello %s", "world")
 }

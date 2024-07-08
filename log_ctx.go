@@ -8,14 +8,15 @@ import (
 )
 
 type LogContext struct {
-	levelF      levelField
-	timeF       timeField
-	callerF     callerField
-	enc         encoder
-	colors      colorfulset
-	writer      WriteSyncer
-	preFields   []Field
-	escapeQuote bool
+	levelF       levelField
+	timeF        timeField
+	callerF      callerField
+	enc          encoder
+	colors       colorfulset
+	writer       WriteSyncer
+	preFields    []Field
+	escapeQuote  bool
+	reflectValue bool
 }
 
 func NewLogContext() *LogContext {
@@ -79,6 +80,11 @@ func (lc *LogContext) WithCaller(enable, fileName, funcName, lineNumber bool) *L
 
 func (lc *LogContext) WithEscapeQuote(enable bool) *LogContext {
 	lc.escapeQuote = enable
+	return lc
+}
+
+func (lc *LogContext) WithReflectValue(enable bool) *LogContext {
+	lc.reflectValue = enable
 	return lc
 }
 
