@@ -1,37 +1,55 @@
 package logx
 
 import (
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 )
 
+type CallerFormatter uint8
+
+const (
+	// package/file:line
+	ShortFile CallerFormatter = iota
+	// /full/path/to/package/file:line
+	FullFile
+	// package/file:line package.func
+	ShortFileFunc
+	// /full/path/to/package/file:line package.func
+	FullFileFunc
+)
+
+type CallerOption struct {
+	// caller key, default: "caller"
+	CallerKey string
+	// file key of caller, default: "file"
+	FileKey string
+	// function key of caller, default: "func"
+	FuncKey string
+	// caller formatter, default: ShortFileCaller
+	Formatter CallerFormatter
+}
+
 type callerField struct {
 	enable    bool
 	skipDepth int
-	funcName  bool
-	fileName  bool
-	lineNum   bool
 	color     bool
+	option    CallerOption
 }
 
-func (c *callerField) format() Field {
-	fileName, funcName, lineNum := c.value()
-	sm := make([]Field, 0, 3)
-	if fileName.has() {
-		sm = append(sm, String("file", fileName.get()))
+func (c *callerField) formatJson(enc *JsonEncoder) {
+	fileName, funcName := c.value()
+	fields := make([]Field, 0, 2)
+	if len(fileName) > 0 {
+		fields = append(fields, String(c.option.FileKey, fileName))
 	}
-	if funcName.has() {
-		sm = append(sm, String("func", funcName.get()))
+	if len(funcName) > 0 {
+		fields = append(fields, String(c.option.FuncKey, funcName))
 	}
-	if lineNum.has() {
-		sm = append(sm, Int("line", lineNum.get()))
-	}
-	return Object("caller", sm...)
+	enc.writeFieldObject(fields)
 }
 
-func (c *callerField) value() (fileName, funcName optval[string], lineNum optval[int]) {
+func (c *callerField) value() (fileName, funcName string) {
 	if !c.enable {
 		return
 	}
@@ -39,44 +57,28 @@ func (c *callerField) value() (fileName, funcName optval[string], lineNum optval
 	if !ok {
 		return
 	}
-	if c.fileName {
-		fileName.set(filepath.Base(file))
+	if c.option.Formatter == ShortFile || c.option.Formatter == ShortFileFunc {
+		if idx := strings.LastIndexByte(file, '/'); idx != -1 {
+			if idx = strings.LastIndexByte(file[:idx], '/'); idx != -1 {
+				file = file[idx+1:]
+			}
+		}
 	}
-	if c.funcName {
-		name := runtime.FuncForPC(pc).Name()
-		parts := strings.Split(name, "/")
-		funcName.set(parts[len(parts)-1])
-	}
-	if c.lineNum {
-		lineNum.set(line)
+	fileName = file + ":" + strconv.FormatInt(int64(line), 10)
+
+	if c.option.Formatter == ShortFileFunc || c.option.Formatter == FullFileFunc {
+		funcName = runtime.FuncForPC(pc).Name()
+		if idx := strings.LastIndexByte(funcName, '/'); idx != -1 {
+			funcName = funcName[idx+1:]
+		}
 	}
 	return
 }
 
 func (c *callerField) String() string {
-	fileName, funcName, lineNum := c.value()
-	var w strings.Builder
-	var packageName string
-	if funcName.has() {
-		parts := strings.Split(funcName.value, ".")
-		if len(parts) > 1 {
-			packageName = parts[0]
-		}
-	}
-	if fileName.has() {
-		if packageName != "" {
-			w.WriteString(packageName)
-			w.WriteByte('/')
-		}
-		w.WriteString(fileName.get())
-	}
-	if lineNum.has() {
-		w.WriteByte(':')
-		w.WriteString(strconv.Itoa(lineNum.get()))
-	}
-	out := w.String()
+	fileName, _ := c.value()
 	if c.color {
-		out = Yellow(out)
+		fileName = Yellow(fileName)
 	}
-	return out
+	return fileName
 }

@@ -1,7 +1,6 @@
 package logx
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -144,10 +143,13 @@ func (l *LoggerX) output(level LevelType, msg string, fields ...Field) {
 		l.logCtx.timeF.now = time.Now()
 	}
 	if l.logCtx.levelF.enable {
+		if level > LevelPanic {
+			level = LevelPanic
+		}
 		l.logCtx.levelF.typ = level
 	}
 
-	buf := l.pool.Get().(*bytes.Buffer)
+	buf := l.pool.Get().(*Buffer)
 	buf.Reset()
 	defer l.pool.Put(buf)
 

@@ -1,24 +1,23 @@
 package logx
 
-import "bytes"
-
 type EncoderType byte
 
 const (
-	// Simple Encode does't support key-value args, only message field can be set
 	Console EncoderType = 1 << iota
 	Json
 )
 
 type encoder interface {
 	Init()
-	Encode(*bytes.Buffer, string, ...Field) error
+	Encode(*Buffer, string, ...Field) error
 }
 
 type sliceFields struct {
 	idx    int
 	fields []Field
 }
+
+func (l *sliceFields) size() int { return len(l.fields) }
 
 func (l *sliceFields) reset() {
 	l.idx = 0

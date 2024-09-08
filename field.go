@@ -48,7 +48,6 @@ type (
 		IntValue    int64
 		StringValue string
 		AnyValue    any
-		NoWrap      bool
 	}
 )
 

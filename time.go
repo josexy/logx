@@ -6,49 +6,59 @@ import (
 	"time"
 )
 
-type timeField struct {
-	enable bool
-	fn     func(t time.Time) any
-	now    time.Time
-	color  bool
+type TimeOption struct {
+	// time key, default: time
+	TimeKey string
+	// time formatter, return value: string, int64, time.Time, any
+	Formatter func(t time.Time) any
 }
 
-func (t *timeField) format() Field {
-	var field Field
+type timeField struct {
+	enable bool
+	color  bool
+	now    time.Time
+	option TimeOption
+}
+
+func (t *timeField) formatJson(enc *JsonEncoder) {
+	enc.writeFieldKey(t.option.TimeKey)
+	enc.buf.WriteByte(':')
+
 	switch val := t.value(); val.(type) {
 	case string:
-		field = String("time", val.(string))
+		enc.writeFieldString(val.(string))
 	case int64:
-		field = Int64("time", val.(int64))
+		enc.writeFieldInt64(val.(int64))
 	default:
-		if t, ok := val.(time.Time); ok {
-			field = Time("time", t)
+		if ts, ok := val.(time.Time); ok {
+			enc.writeFieldTime(ts)
 		} else {
-			field = String("time", fmt.Sprintf("%v", val))
+			enc.writeFieldString(fmt.Sprintf("%v", val))
 		}
 	}
-	return field
 }
 
 func (t *timeField) value() (out any) {
 	if !t.enable {
 		return
 	}
-	if t.fn == nil {
-		return
-	}
-	out = t.fn(t.now)
+	out = t.option.Formatter(t.now)
 	return
 }
 
 func (t *timeField) String() string {
-	field := t.format()
 	var out string
-	switch field.Type {
-	case StringType:
-		out = field.StringValue
-	case Int64Type:
-		out = strconv.FormatInt(field.IntValue, 10)
+	switch val := t.value(); val.(type) {
+	case string:
+		out = val.(string)
+	case int64:
+		out = strconv.FormatInt(val.(int64), 10)
+	default:
+		if ts, ok := val.(time.Time); ok {
+			out = ts.Format(time.DateTime)
+		} else {
+			out = fmt.Sprintf("%v", val)
+		}
 	}
 	if t.color && len(out) > 0 {
 		out = Blue(out)

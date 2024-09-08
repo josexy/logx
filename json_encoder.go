@@ -1,18 +1,17 @@
 package logx
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"reflect"
 	"strconv"
+	"sync"
 	"time"
-	"unsafe"
 )
 
 type JsonEncoder struct {
 	*LogContext
-	buf          *bytes.Buffer
+	buf          *Buffer
 	fieldsRanger sliceFields
 }
 
@@ -25,14 +24,14 @@ func (enc *JsonEncoder) Init() {
 	enc.colors.init()
 }
 
-func (enc *JsonEncoder) Encode(buf *bytes.Buffer, msg string, fields ...Field) error {
+func (enc *JsonEncoder) Encode(buf *Buffer, msg string, fields ...Field) error {
 	enc.buf = buf
 	enc.fieldsRanger.reset()
 
 	enc.writeBeginObject()
-	enc.addPromptFields()
+	enc.writePromptFields()
 	enc.addPrefixFields()
-	enc.fieldsRanger.put(String("msg", msg))
+	enc.fieldsRanger.put(String(enc.msgKey, msg))
 	enc.fieldsRanger.put(fields...)
 
 	enc.fieldsRanger.writeRangeFields(enc.writeField, enc.writeSplitComma)
@@ -49,15 +48,18 @@ func (enc *JsonEncoder) writeBeginArray() { enc.buf.WriteByte('[') }
 
 func (enc *JsonEncoder) writeEndArray() { enc.buf.WriteByte(']') }
 
-func (enc *JsonEncoder) addPromptFields() {
+func (enc *JsonEncoder) writePromptFields() {
 	if enc.levelF.enable {
-		enc.fieldsRanger.put(enc.levelF.format())
+		enc.levelF.formatJson(enc)
+		enc.writeSplitComma()
 	}
 	if enc.timeF.enable {
-		enc.fieldsRanger.put(enc.timeF.format())
+		enc.timeF.formatJson(enc)
+		enc.writeSplitComma()
 	}
-	if enc.callerF.enable && (enc.callerF.fileName || enc.callerF.funcName || enc.callerF.lineNum) {
-		enc.fieldsRanger.put(enc.callerF.format())
+	if enc.callerF.enable {
+		enc.callerF.formatJson(enc)
+		enc.writeSplitComma()
 	}
 }
 
@@ -72,17 +74,10 @@ func (enc *JsonEncoder) writeSplitComma() {
 	enc.buf.WriteByte(',')
 }
 
-func (enc *JsonEncoder) wrapKey(key string) string {
-	if enc.colors.enable && enc.colors.colorAttri.keyColor != nil {
-		return enc.colors.colorAttri.keyColor.Sprint(key)
-	}
-	return key
-}
-
 func (enc *JsonEncoder) writeFieldValue(field Field) {
 	switch field.Type {
 	case StringType:
-		enc.writeFieldString(field.StringValue, !field.NoWrap)
+		enc.writeFieldString(field.StringValue)
 	case BoolType:
 		enc.writeFieldBool(field.IntValue == 1)
 	case Int8Type:
@@ -140,46 +135,58 @@ func (enc *JsonEncoder) writeField(field Field) error {
 	if field.Type == NoneType {
 		return errInvalidFieldType
 	}
-	enc.writeFieldKey(field.Key, true)
+	enc.writeFieldKey(field.Key)
 	enc.buf.WriteByte(':')
 	enc.writeFieldValue(field)
 	return nil
 }
 
+func (enc *JsonEncoder) isWrappedString() bool {
+	return enc.colors.enable && enc.colors.colorAttri.stringColor != nil
+}
+
+func (enc *JsonEncoder) isWrappedFloat() bool {
+	return enc.colors.enable && enc.colors.colorAttri.floatColor != nil
+}
+
+func (enc *JsonEncoder) isWrappedNumber() bool {
+	return enc.colors.enable && enc.colors.colorAttri.numberColor != nil
+}
+
+func (enc *JsonEncoder) isWrappedBool() bool {
+	return enc.colors.enable && enc.colors.colorAttri.boolColor != nil
+}
+
+func (enc *JsonEncoder) isWrappedKey() bool {
+	return enc.colors.enable && enc.colors.colorAttri.keyColor != nil
+}
+
+func (enc *JsonEncoder) wrapKey(key string) string {
+	return enc.colors.colorAttri.keyColor.Sprint(key)
+}
+
 func (enc *JsonEncoder) wrapString(value string) string {
-	if enc.colors.enable && enc.colors.colorAttri.stringColor != nil {
-		return enc.colors.colorAttri.stringColor.Sprint(value)
-	}
-	return value
+	return enc.colors.colorAttri.stringColor.Sprint(value)
 }
 
 func (enc *JsonEncoder) wrapBool(value string) string {
-	if enc.colors.enable && enc.colors.colorAttri.boolColor != nil {
-		return enc.colors.colorAttri.boolColor.Sprint(value)
-	}
-	return value
+	return enc.colors.colorAttri.boolColor.Sprint(value)
 }
 
 func (enc *JsonEncoder) wrapFloat(value string) string {
-	if enc.colors.enable && enc.colors.colorAttri.floatColor != nil {
-		return enc.colors.colorAttri.floatColor.Sprint(value)
-	}
-	return value
+	return enc.colors.colorAttri.floatColor.Sprint(value)
 }
 
 func (enc *JsonEncoder) wrapNumber(value string) string {
-	if enc.colors.enable && enc.colors.colorAttri.numberColor != nil {
-		return enc.colors.colorAttri.numberColor.Sprint(value)
-	}
-	return value
+	return enc.colors.colorAttri.numberColor.Sprint(value)
 }
 
-func (enc *JsonEncoder) writeFieldKey(key string, isWrap bool) {
+func (enc *JsonEncoder) writeFieldKey(key string) {
 	enc.buf.WriteByte('"')
-	if enc.escapeQuote && isWrap {
+	if enc.escapeQuote {
 		key = quoteString(key)
 	}
-	if isWrap {
+	if enc.isWrappedKey() {
 		enc.buf.WriteString(enc.wrapKey(key))
 	} else {
 		enc.buf.WriteString(key)
@@ -187,12 +194,18 @@ func (enc *JsonEncoder) writeFieldKey(key string, isWrap bool) {
 	enc.buf.WriteByte('"')
 }
 
-func (enc *JsonEncoder) writeFieldString(value string, wrap bool) {
+func (enc *JsonEncoder) writeFieldStringPrimitive(value string) {
 	enc.buf.WriteByte('"')
-	if enc.escapeQuote && wrap {
+	enc.buf.WriteString(value)
+	enc.buf.WriteByte('"')
+}
+
+func (enc *JsonEncoder) writeFieldString(value string) {
+	enc.buf.WriteByte('"')
+	if enc.escapeQuote {
 		value = quoteString(value)
 	}
-	if wrap {
+	if enc.isWrappedString() {
 		enc.buf.WriteString(enc.wrapString(value))
 	} else {
 		enc.buf.WriteString(value)
@@ -201,81 +214,133 @@ func (enc *JsonEncoder) writeFieldString(value string, wrap bool) {
 }
 
 func (enc *JsonEncoder) writeFieldBool(value bool) {
-	if value {
-		enc.buf.WriteString(enc.wrapBool("true"))
+	if enc.isWrappedBool() {
+		if value {
+			enc.buf.AppendString(enc.wrapBool("true"))
+		} else {
+			enc.buf.AppendString(enc.wrapBool("false"))
+		}
 	} else {
-		enc.buf.WriteString(enc.wrapBool("false"))
+		enc.buf.AppendBool(value)
 	}
 }
 
 func (enc *JsonEncoder) writeFieldInt8(value int8) {
-	enc.buf.WriteString(enc.wrapNumber(enc.wrapNumber(strconv.FormatInt(int64(value), 10))))
+	if enc.isWrappedNumber() {
+		enc.buf.AppendString(enc.wrapNumber(strconv.FormatInt(int64(value), 10)))
+	} else {
+		enc.buf.AppendInt(int64(value))
+	}
 }
 
 func (enc *JsonEncoder) writeFieldInt16(value int16) {
-	enc.buf.WriteString(enc.wrapNumber(strconv.FormatInt(int64(value), 10)))
+	if enc.isWrappedNumber() {
+		enc.buf.AppendString(enc.wrapNumber(strconv.FormatInt(int64(value), 10)))
+	} else {
+		enc.buf.AppendInt(int64(value))
+	}
 }
 
 func (enc *JsonEncoder) writeFieldInt32(value int32) {
-	enc.buf.WriteString(enc.wrapNumber(strconv.FormatInt(int64(value), 10)))
+	if enc.isWrappedNumber() {
+		enc.buf.AppendString(enc.wrapNumber(strconv.FormatInt(int64(value), 10)))
+	} else {
+		enc.buf.AppendInt(int64(value))
+	}
 }
 
 func (enc *JsonEncoder) writeFieldInt64(value int64) {
-	enc.buf.WriteString(enc.wrapNumber(strconv.FormatInt(value, 10)))
+	if enc.isWrappedNumber() {
+		enc.buf.AppendString(enc.wrapNumber(strconv.FormatInt(value, 10)))
+	} else {
+		enc.buf.AppendInt(value)
+	}
 }
 
 func (enc *JsonEncoder) writeFieldInt(value int) {
-	enc.buf.WriteString(enc.wrapNumber(strconv.FormatInt(int64(value), 10)))
+	if enc.isWrappedNumber() {
+		enc.buf.AppendString(enc.wrapNumber(strconv.FormatInt(int64(value), 10)))
+	} else {
+		enc.buf.AppendInt(int64(value))
+	}
 }
 
 func (enc *JsonEncoder) writeFieldUint8(value uint8) {
-	enc.buf.WriteString(enc.wrapNumber(strconv.FormatUint(uint64(value), 10)))
+	if enc.isWrappedNumber() {
+		enc.buf.AppendString(enc.wrapNumber(strconv.FormatUint(uint64(value), 10)))
+	} else {
+		enc.buf.AppendUint(uint64(value))
+	}
 }
 
 func (enc *JsonEncoder) writeFieldUint16(value uint16) {
-	enc.buf.WriteString(enc.wrapNumber(strconv.FormatUint(uint64(value), 10)))
+	if enc.isWrappedNumber() {
+		enc.buf.AppendString(enc.wrapNumber(strconv.FormatUint(uint64(value), 10)))
+	} else {
+		enc.buf.AppendUint(uint64(value))
+	}
 }
 
 func (enc *JsonEncoder) writeFieldUint32(value uint32) {
-	enc.buf.WriteString(enc.wrapNumber(strconv.FormatUint(uint64(value), 10)))
+	if enc.isWrappedNumber() {
+		enc.buf.AppendString(enc.wrapNumber(strconv.FormatUint(uint64(value), 10)))
+	} else {
+		enc.buf.AppendUint(uint64(value))
+	}
 }
 
 func (enc *JsonEncoder) writeFieldUint64(value uint64) {
-	enc.buf.WriteString(enc.wrapNumber(strconv.FormatUint(uint64(value), 10)))
+	if enc.isWrappedNumber() {
+		enc.buf.AppendString(enc.wrapNumber(strconv.FormatUint(value, 10)))
+	} else {
+		enc.buf.AppendUint(value)
+	}
 }
 
 func (enc *JsonEncoder) writeFieldUint(value uint) {
-	enc.buf.WriteString(enc.wrapNumber(strconv.FormatUint(uint64(value), 10)))
+	if enc.isWrappedNumber() {
+		enc.buf.AppendString(enc.wrapNumber(strconv.FormatUint(uint64(value), 10)))
+	} else {
+		enc.buf.AppendUint(uint64(value))
+	}
 }
 
 func (enc *JsonEncoder) writeFieldFloat32(value float32) {
-	enc.buf.WriteString(enc.wrapFloat(strconv.FormatFloat(float64(value), 'f', 3, 32)))
+	if enc.isWrappedFloat() {
+		enc.buf.AppendString(enc.wrapFloat(strconv.FormatFloat(float64(value), 'f', -1, 32)))
+	} else {
+		enc.buf.AppendFloat(float64(value), 32)
+	}
 }
 
 func (enc *JsonEncoder) writeFieldFloat64(value float64) {
-	enc.buf.WriteString(enc.wrapFloat(strconv.FormatFloat(value, 'f', 3, 64)))
+	if enc.isWrappedFloat() {
+		enc.buf.AppendString(enc.wrapFloat(strconv.FormatFloat(value, 'f', -1, 64)))
+	} else {
+		enc.buf.AppendFloat(value, 64)
+	}
 }
 
 func (enc *JsonEncoder) writeFieldTime(value time.Time) {
-	enc.writeFieldString(value.Format(time.DateTime), true)
+	enc.writeFieldString(value.Format(time.DateTime))
 }
 
 func (enc *JsonEncoder) writeFieldDuration(value time.Duration) {
-	enc.writeFieldString(value.String(), true)
+	enc.writeFieldString(value.String())
 }
 
 func (enc *JsonEncoder) writeFieldError(value error) {
 	if value == nil {
 		enc.writeFieldNil()
 	} else {
-		enc.writeFieldString(value.Error(), true)
+		enc.writeFieldString(value.Error())
 	}
 }
 
 func (enc *JsonEncoder) writeFieldObject(value []Field) {
 	enc.writeBeginObject()
-	consumer := sliceFields{fields: value}
-	consumer.writeRangeFields(enc.writeField, enc.writeSplitComma)
+	fieldsRanger := sliceFields{fields: value}
+	fieldsRanger.writeRangeFields(enc.writeField, enc.writeSplitComma)
 	enc.writeEndObject()
 }
 
@@ -290,7 +355,11 @@ func (enc *JsonEncoder) writeFieldArray(value any) {
 }
 
 func (enc *JsonEncoder) writeFieldNil() {
-	enc.buf.WriteString(enc.wrapString("null"))
+	if enc.isWrappedString() {
+		enc.buf.WriteString(enc.wrapString("null"))
+	} else {
+		enc.buf.WriteString("null")
+	}
 }
 
 func writeFieldArrayListFor[T any](value []T, enc *JsonEncoder, wf func(T), lf func()) {
@@ -323,7 +392,7 @@ func writeFieldArrayListForReflectValue(value reflect.Value, enc *JsonEncoder, w
 func (enc *JsonEncoder) writeFieldAny(value any) {
 	switch v := value.(type) {
 	case []string:
-		writeFieldArrayListFor(v, enc, func(s string) { enc.writeFieldString(s, true) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s string) { enc.writeFieldString(s) }, enc.writeSplitComma)
 	case []bool:
 		writeFieldArrayListFor(v, enc, func(s bool) { enc.writeFieldBool(s) }, enc.writeSplitComma)
 	case []int8:
@@ -361,7 +430,7 @@ func (enc *JsonEncoder) writeFieldAny(value any) {
 	case []any:
 		writeFieldArrayListFor(v, enc, func(s any) { enc.writeFieldAny(s) }, enc.writeSplitComma)
 	case string:
-		enc.writeFieldString(v, true)
+		enc.writeFieldString(v)
 	case bool:
 		enc.writeFieldBool(v)
 	case int8:
@@ -403,17 +472,21 @@ func (enc *JsonEncoder) writeFieldAny(value any) {
 			valueOf := reflect.ValueOf(value)
 			writeFieldArrayListForReflectValue(valueOf, enc, enc.writeFieldAny, enc.writeSplitComma)
 		} else {
-			enc.writeFieldString(fmt.Sprintf("%v", value), true)
+			enc.writeFieldString(fmt.Sprintf("%v", value))
 		}
 	}
 }
 
-func quoteString(value string) string {
-	buf := make([]byte, 0, 3*len(value)/2)
-	data := strconv.AppendQuote(buf, value)
-	return bytesToString(data[1 : len(data)-1])
-}
+var quoteBufPool = sync.Pool{New: func() any { return NewBuffer(make([]byte, 0, 64)) }}
 
-func bytesToString(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
+func quoteString(value string) string {
+	if len(value) == 0 {
+		return value
+	}
+	buf := quoteBufPool.Get().(*Buffer)
+	defer quoteBufPool.Put(buf)
+	buf.Reset()
+	buf.TryGrow(3 * len(value) / 2)
+	buf.AppendQuote(value)
+	return string(buf.Bytes()[1 : buf.Len()-1])
 }

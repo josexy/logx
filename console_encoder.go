@@ -1,9 +1,5 @@
 package logx
 
-import (
-	"bytes"
-)
-
 var ConsoleEncoderSplitCharacter = byte('\t')
 
 type ConsoleEncoder struct {
@@ -21,7 +17,7 @@ func (enc *ConsoleEncoder) Init() {
 	}
 }
 
-func (enc *ConsoleEncoder) Encode(buf *bytes.Buffer, msg string, fields ...Field) error {
+func (enc *ConsoleEncoder) Encode(buf *Buffer, msg string, fields ...Field) error {
 	if enc.timeF.enable {
 		buf.WriteString(enc.timeF.String())
 		buf.WriteByte(ConsoleEncoderSplitCharacter)
@@ -30,21 +26,22 @@ func (enc *ConsoleEncoder) Encode(buf *bytes.Buffer, msg string, fields ...Field
 		buf.WriteString(enc.levelF.String())
 		buf.WriteByte(ConsoleEncoderSplitCharacter)
 	}
-	if enc.callerF.enable && (enc.callerF.fileName || enc.callerF.funcName || enc.callerF.lineNum) {
+	if enc.callerF.enable {
 		buf.WriteString(enc.callerF.String())
 		buf.WriteByte(ConsoleEncoderSplitCharacter)
 	}
 
 	buf.WriteString(msg)
-	if len(fields) == 0 {
-		return nil
-	}
-	buf.WriteByte(ConsoleEncoderSplitCharacter)
+
 	enc.jsonEncoder.buf = buf
 	enc.jsonEncoder.fieldsRanger.reset()
 	enc.jsonEncoder.addPrefixFields()
 	enc.jsonEncoder.fieldsRanger.put(fields...)
+	if enc.jsonEncoder.fieldsRanger.size() == 0 {
+		return nil
+	}
 
+	buf.WriteByte(ConsoleEncoderSplitCharacter)
 	enc.jsonEncoder.writeBeginObject()
 	err := enc.jsonEncoder.fieldsRanger.writeRangeFields(enc.jsonEncoder.writeField, enc.jsonEncoder.writeSplitComma)
 	if err != nil {

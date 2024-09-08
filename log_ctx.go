@@ -1,7 +1,6 @@
 package logx
 
 import (
-	"bytes"
 	"io"
 	"sync"
 	"time"
@@ -15,6 +14,7 @@ type LogContext struct {
 	colors       colorfulset
 	writer       WriteSyncer
 	preFields    []Field
+	msgKey       string
 	escapeQuote  bool
 	reflectValue bool
 }
@@ -53,28 +53,58 @@ func (lc *LogContext) WithColorfulset(enable bool, attr TextColorAttri) *LogCont
 	return lc
 }
 
-func (lc *LogContext) WithLevel(enable, lower bool) *LogContext {
-	lc.levelF.enable = enable
-	lc.levelF.lower = lower
-	return lc
-}
-
-func (lc *LogContext) WithTime(enable bool, format func(time.Time) any) *LogContext {
-	if format == nil {
-		format = func(t time.Time) any {
-			return t.Format(time.RFC3339)
-		}
+func (lc *LogContext) WithMsgKey(key string) *LogContext {
+	if len(key) == 0 {
+		key = "msg"
 	}
-	lc.timeF.enable = enable
-	lc.timeF.fn = format
+	if lc.msgKey != key {
+		lc.msgKey = key
+	}
 	return lc
 }
 
-func (lc *LogContext) WithCaller(enable, fileName, funcName, lineNumber bool) *LogContext {
+func (lc *LogContext) WithLevel(enable bool, option LevelOption) *LogContext {
+	lc.levelF.enable = enable
+	if enable {
+		if len(option.LevelKey) == 0 {
+			option.LevelKey = "level"
+		}
+		lc.levelF.option = option
+	}
+	return lc
+}
+
+func (lc *LogContext) WithTime(enable bool, option TimeOption) *LogContext {
+	lc.timeF.enable = enable
+	if enable {
+		if len(option.TimeKey) == 0 {
+			option.TimeKey = "time"
+		}
+		if option.Formatter == nil {
+			option.Formatter = func(t time.Time) any { return t.Format(time.RFC3339) }
+		}
+		lc.timeF.option = option
+	}
+	return lc
+}
+
+func (lc *LogContext) WithCaller(enable bool, option CallerOption) *LogContext {
 	lc.callerF.enable = enable
-	lc.callerF.fileName = fileName
-	lc.callerF.funcName = funcName
-	lc.callerF.lineNum = lineNumber
+	if enable {
+		if len(option.CallerKey) == 0 {
+			option.CallerKey = "caller"
+		}
+		if len(option.FileKey) == 0 {
+			option.FileKey = "file"
+		}
+		if len(option.FuncKey) == 0 {
+			option.FuncKey = "func"
+		}
+		if option.Formatter > FullFileFunc {
+			option.Formatter = FullFileFunc
+		}
+		lc.callerF.option = option
+	}
 	return lc
 }
 
@@ -109,18 +139,19 @@ func (lc *LogContext) BuildConsoleLogger(level LevelType) Logger {
 	if lc.enc != nil {
 		lc.enc.Init()
 	}
+	lc.WithMsgKey(lc.msgKey)
 	return &LoggerX{
 		logCtx:   lc,
 		logLevel: level,
 		pool: sync.Pool{
-			New: func() any { return bytes.NewBuffer(make([]byte, 0, 1024)) },
+			New: func() any { return NewBuffer(make([]byte, 0, 1024)) },
 		},
 	}
 }
 
 func (lc *LogContext) BuildFileLogger(level LevelType, writer io.Writer) Logger {
 	// For file logger, need to disable color attributes
-	lc = lc.WithColorfulset(false, TextColorAttri{}).WithWriter(AddSync(writer))
+	lc = lc.WithColorfulset(false, TextColorAttri{}).WithMsgKey(lc.msgKey).WithWriter(AddSync(writer))
 	if lc.enc != nil {
 		lc.enc.Init()
 	}
@@ -128,7 +159,7 @@ func (lc *LogContext) BuildFileLogger(level LevelType, writer io.Writer) Logger 
 		logCtx:   lc,
 		logLevel: level,
 		pool: sync.Pool{
-			New: func() any { return bytes.NewBuffer(make([]byte, 0, 1024)) },
+			New: func() any { return NewBuffer(make([]byte, 0, 1024)) },
 		},
 	}
 }

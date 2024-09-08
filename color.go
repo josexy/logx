@@ -2,9 +2,10 @@ package logx
 
 import "github.com/fatih/color"
 
+type ColorAttr = uint8
+
 const (
-	NoneAttr = iota
-	GreenAttr
+	GreenAttr ColorAttr = iota
 	YellowAttr
 	BlueAttr
 	RedAttr
@@ -38,19 +39,19 @@ func (c *colorfulset) init() {
 	if !c.enable {
 		return
 	}
-	if c.attr.KeyColor == 0 {
+	if c.attr.KeyColor == 0 || c.attr.KeyColor > HiWhiteAttr {
 		c.attr.KeyColor = BlueAttr
 	}
-	if c.attr.StringColor == 0 {
+	if c.attr.StringColor == 0 || c.attr.StringColor > HiWhiteAttr {
 		c.attr.StringColor = GreenAttr
 	}
-	if c.attr.BooleanColor == 0 {
+	if c.attr.BooleanColor == 0 || c.attr.BooleanColor > HiWhiteAttr {
 		c.attr.BooleanColor = YellowAttr
 	}
-	if c.attr.FloatColor == 0 {
+	if c.attr.FloatColor == 0 || c.attr.FloatColor > HiWhiteAttr {
 		c.attr.FloatColor = CyanAttr
 	}
-	if c.attr.NumberColor == 0 {
+	if c.attr.NumberColor == 0 || c.attr.NumberColor > HiWhiteAttr {
 		c.attr.NumberColor = RedAttr
 	}
 	c.keyColor = colorMap[c.attr.KeyColor]
@@ -61,11 +62,11 @@ func (c *colorfulset) init() {
 }
 
 type TextColorAttri struct {
-	KeyColor     uint8
-	StringColor  uint8
-	BooleanColor uint8
-	FloatColor   uint8
-	NumberColor  uint8
+	KeyColor     ColorAttr
+	StringColor  ColorAttr
+	BooleanColor ColorAttr
+	FloatColor   ColorAttr
+	NumberColor  ColorAttr
 }
 
 var (

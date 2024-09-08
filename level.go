@@ -3,7 +3,7 @@ package logx
 type LevelType uint8
 
 const (
-	LevelTrace LevelType = 1 << iota
+	LevelTrace LevelType = iota
 	LevelDebug
 	LevelInfo
 	LevelWarn
@@ -12,96 +12,67 @@ const (
 	LevelPanic
 )
 
-type levelField struct {
-	enable bool
-	lower  bool
-	color  bool
-	typ    LevelType
+var (
+	levelTypeLowerMap = map[LevelType]string{
+		LevelTrace: "trace",
+		LevelDebug: "debug",
+		LevelInfo:  "info",
+		LevelWarn:  "warn",
+		LevelError: "error",
+		LevelFatal: "fatal",
+		LevelPanic: "panic",
+	}
+	levelTypeUpperMap = map[LevelType]string{
+		LevelTrace: "TRACE",
+		LevelDebug: "DEBUG",
+		LevelInfo:  "INFO",
+		LevelWarn:  "WARN",
+		LevelError: "ERROR",
+		LevelFatal: "FATAL",
+		LevelPanic: "PANIC",
+	}
+	levelTypeColorMap = map[LevelType]func(string) string{
+		LevelTrace: Magenta,
+		LevelDebug: HiCyan,
+		LevelInfo:  Green,
+		LevelWarn:  Yellow,
+		LevelError: Red,
+		LevelFatal: HiRed,
+		LevelPanic: HiYellow,
+	}
+)
+
+type LevelOption struct {
+	// level key, default: "level"
+	LevelKey string
+	// lower level key
+	LowerKey bool
 }
 
-func (lvl *levelField) format() Field {
-	return Field{
-		Key:         "level",
-		Type:        StringType,
-		StringValue: lvl.String(),
-		NoWrap:      true,
-	}
+type levelField struct {
+	enable bool
+	color  bool
+	typ    LevelType
+	option LevelOption
+}
+
+func (lvl *levelField) formatJson(enc *JsonEncoder) {
+	enc.writeFieldKey(lvl.option.LevelKey)
+	enc.buf.WriteByte(':')
+	enc.writeFieldStringPrimitive(lvl.String())
 }
 
 func (lvl *levelField) String() (out string) {
 	if !lvl.enable {
 		return
 	}
-	switch lvl.typ {
-	case LevelTrace:
-		if lvl.lower {
-			out = "trace"
-		} else {
-			out = "TRACE"
-		}
-		if lvl.color {
-			out = Magenta(out)
-		}
-	case LevelDebug:
-		if lvl.lower {
-			out = "debug"
-		} else {
-			out = "DEBUG"
-		}
-		if lvl.color {
-			out = HiCyan(out)
-		}
-	case LevelInfo:
-		if lvl.lower {
-			out = "info"
-		} else {
-			out = "INFO"
-		}
-		if lvl.color {
-			out = Green(out)
-		}
-	case LevelWarn:
-		if lvl.lower {
-			out = "warn"
-		} else {
-			out = "WARN"
-		}
-		if lvl.color {
-			out = Yellow(out)
-		}
-	case LevelError:
-		if lvl.lower {
-			out = "error"
-		} else {
-			out = "ERROR"
-		}
-		if lvl.color {
-			out = Red(out)
-		}
-	case LevelFatal:
-		if lvl.lower {
-			out = "fatal"
-		} else {
-			out = "FATAL"
-		}
-		if lvl.color {
-			out = HiRed(out)
-		}
-	case LevelPanic:
-		if lvl.lower {
-			out = "panic"
-		} else {
-			out = "PANIC"
-		}
-		if lvl.color {
-			out = HiYellow(out)
-		}
-	default:
-		if lvl.lower {
-			out = "unknown"
-		} else {
-			out = "UNKNOWN"
-		}
+	if lvl.option.LowerKey {
+		out = levelTypeLowerMap[lvl.typ]
+	} else {
+		out = levelTypeUpperMap[lvl.typ]
+	}
+	if lvl.color && len(out) > 0 {
+		out = levelTypeColorMap[lvl.typ](out)
 	}
 	return
 }
