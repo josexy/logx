@@ -9,17 +9,19 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/josexy/logx"
+	"github.com/josexy/logx/example/sub"
 )
 
 func main() {
 	logCtx := logx.NewLogContext().
 		WithColorfulset(true, logx.TextColorAttri{}).
-		WithLevel(true, true).
-		WithCaller(true, true, true, true).
+		WithLevel(true, logx.LevelOption{}).
+		WithCaller(true, logx.CallerOption{Formatter: logx.FullFile}).
 		WithWriter(logx.AddSync(color.Output)).
 		// WithWriter(logx.AddSync(nil)).
 		WithEncoder(logx.Console).
-		WithTime(true, func(t time.Time) any { return t.Format(time.DateTime) })
+		WithEscapeQuote(true).
+		WithTime(true, logx.TimeOption{Formatter: func(t time.Time) any { return t.Format(time.DateTime) }})
 
 	loggerSimple := logCtx.BuildConsoleLogger(logx.LevelTrace)
 	loggerSimple.Trace("this is a trace message", logx.String("key", "value"), logx.Int("key", 2222))
@@ -30,6 +32,7 @@ func main() {
 
 	logCtx = logCtx.Copy().
 		WithEncoder(logx.Json).
+		WithCaller(true, logx.CallerOption{Formatter: logx.ShortFileFunc}).
 		WithEscapeQuote(true)
 
 	// file, err := os.Create("test.log")
@@ -37,13 +40,13 @@ func main() {
 	// 	panic(err)
 	// }
 	// defer file.Close()
-	// loggerJson := logCtx.WithEncoder(logx.Console).BuildFileLogger(logx.LevelInfo, io.MultiWriter(file, os.Stdout))
+	// loggerJson := logCtx.WithEncoder(logx.Json).BuildFileLogger(logx.LevelInfo, io.MultiWriter(file, os.Stdout))
 
-	loggerJson := logCtx.
-		WithEncoder(logx.Console).
+	loggerJson := logCtx.WithEncoder(logx.Json).
 		WithReflectValue(true).
 		WithFields(logx.String("os", runtime.GOOS), logx.String("arch", runtime.GOARCH)).
 		BuildConsoleLogger(logx.LevelTrace)
+
 	loggerJson.Trace("this is a trace message")
 	loggerJson.Debug("this is a debug message")
 	loggerJson.Info("this is an info message")
@@ -134,6 +137,8 @@ func main() {
 		netip.MustParseAddr("8.8.8.8"),
 	))
 
-	loggerSimple.Error("this is an error message")
-	loggerSimple.Tracef("hello %s", "world")
+	loggerSimple.Error("this is an \"error\" message", logx.String("\"key\"", `"hell"oworld"`))
+	loggerSimple.Tracef("hello \"%s\"", "world")
+
+	sub.TestLogger()
 }
