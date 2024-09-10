@@ -17,7 +17,7 @@ func (enc *ConsoleEncoder) Init() {
 	}
 }
 
-func (enc *ConsoleEncoder) Encode(buf *Buffer, msg string, fields ...Field) error {
+func (enc *ConsoleEncoder) Encode(buf *Buffer, msg string, fields []Field) error {
 	if enc.timeF.enable {
 		buf.WriteString(enc.timeF.String())
 		buf.WriteByte(ConsoleEncoderSplitCharacter)
@@ -33,19 +33,28 @@ func (enc *ConsoleEncoder) Encode(buf *Buffer, msg string, fields ...Field) erro
 
 	buf.WriteString(msg)
 
-	enc.jsonEncoder.buf = buf
-	enc.jsonEncoder.fieldsRanger.reset()
-	enc.jsonEncoder.addPrefixFields()
-	enc.jsonEncoder.fieldsRanger.put(fields...)
-	if enc.jsonEncoder.fieldsRanger.size() == 0 {
+	n1 := len(fields)
+	n2 := len(enc.preFields)
+	if n1 == 0 && n2 == 0 {
 		return nil
 	}
-
 	buf.WriteByte(ConsoleEncoderSplitCharacter)
+
+	enc.jsonEncoder.buf = buf
 	enc.jsonEncoder.writeBeginObject()
-	err := enc.jsonEncoder.fieldsRanger.writeRangeFields(enc.jsonEncoder.writeField, enc.jsonEncoder.writeSplitComma)
-	if err != nil {
-		return err
+	enc.jsonEncoder.writePrefixFields()
+	if n1 == 0 {
+		enc.jsonEncoder.writeEndObject()
+		return nil
+	}
+	enc.jsonEncoder.writeSplitComma()
+	for i := 0; i < n1; i++ {
+		if err := enc.jsonEncoder.writeField(&fields[i]); err != nil {
+			return err
+		}
+		if i+1 != n1 {
+			enc.jsonEncoder.writeSplitComma()
+		}
 	}
 	enc.jsonEncoder.writeEndObject()
 	return nil

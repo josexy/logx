@@ -249,20 +249,18 @@ func BenchmarkJsonLoggerWithSimpleField(b *testing.B) {
 func BenchmarkConsoleLoggerWithField(b *testing.B) {
 	// disable level/time/caller attributes
 	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Console).BuildConsoleLogger(LevelTrace)
-	arr := []int{10, 20, 30}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		logger.Info("this is a message", ArrayT("key", arr...))
+		logger.Info("this is a message", String("key", "value"), Int("int", 10000))
 	}
 }
 
 func BenchmarkJsonLoggerWithField(b *testing.B) {
 	// disable level/time/caller attributes
 	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
-	arr := []int{10, 20, 30}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		logger.Info("this is a message", ArrayT("key", arr...))
+		logger.Info("this is a message", String("key", "value"), Int("int", 10000))
 	}
 }
 

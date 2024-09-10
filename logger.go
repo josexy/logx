@@ -18,5 +18,5 @@ type Logger interface {
 	PanicWith(err error)
 	ErrorWith(err error)
 	FatalWith(err error)
-	WithFields(fields ...Field) Logger
+	With(fields ...Field) Logger
 }

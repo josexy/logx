@@ -36,7 +36,7 @@ type LoggerX struct {
 	pool     sync.Pool
 }
 
-func (l *LoggerX) print(level LevelType, msg string, fields ...Field) {
+func (l *LoggerX) print(level LevelType, msg string, fields []Field) {
 	// discard the log
 	if l.logCtx.writer == nil || l.logCtx.writer == io.Discard {
 		return
@@ -44,57 +44,57 @@ func (l *LoggerX) print(level LevelType, msg string, fields ...Field) {
 	if l.skipLevelLog(level) {
 		return
 	}
-	l.output(level, msg, fields...)
+	l.output(level, msg, fields)
 }
 
-func (l *LoggerX) Trace(msg string, fields ...Field) { l.print(LevelTrace, msg, fields...) }
+func (l *LoggerX) Trace(msg string, fields ...Field) { l.print(LevelTrace, msg, fields) }
 
-func (l *LoggerX) Debug(msg string, fields ...Field) { l.print(LevelDebug, msg, fields...) }
+func (l *LoggerX) Debug(msg string, fields ...Field) { l.print(LevelDebug, msg, fields) }
 
-func (l *LoggerX) Info(msg string, fields ...Field) { l.print(LevelInfo, msg, fields...) }
+func (l *LoggerX) Info(msg string, fields ...Field) { l.print(LevelInfo, msg, fields) }
 
-func (l *LoggerX) Warn(msg string, fields ...Field) { l.print(LevelWarn, msg, fields...) }
+func (l *LoggerX) Warn(msg string, fields ...Field) { l.print(LevelWarn, msg, fields) }
 
-func (l *LoggerX) Error(msg string, fields ...Field) { l.print(LevelError, msg, fields...) }
+func (l *LoggerX) Error(msg string, fields ...Field) { l.print(LevelError, msg, fields) }
 
 func (l *LoggerX) Fatal(msg string, fields ...Field) {
-	l.print(LevelFatal, msg, fields...)
+	l.print(LevelFatal, msg, fields)
 	os.Exit(1)
 }
 
 func (l *LoggerX) Panic(msg string, fields ...Field) {
-	l.print(LevelPanic, msg, fields...)
+	l.print(LevelPanic, msg, fields)
 	panic(msg)
 }
 
 func (l *LoggerX) Tracef(format string, args ...any) {
-	l.print(LevelTrace, fmt.Sprintf(format, args...))
+	l.print(LevelTrace, fmt.Sprintf(format, args...), nil)
 }
 
 func (l *LoggerX) Debugf(format string, args ...any) {
-	l.print(LevelDebug, fmt.Sprintf(format, args...))
+	l.print(LevelDebug, fmt.Sprintf(format, args...), nil)
 }
 
 func (l *LoggerX) Infof(format string, args ...any) {
-	l.print(LevelInfo, fmt.Sprintf(format, args...))
+	l.print(LevelInfo, fmt.Sprintf(format, args...), nil)
 }
 
 func (l *LoggerX) Warnf(format string, args ...any) {
-	l.print(LevelWarn, fmt.Sprintf(format, args...))
+	l.print(LevelWarn, fmt.Sprintf(format, args...), nil)
 }
 
 func (l *LoggerX) Errorf(format string, args ...any) {
-	l.print(LevelError, fmt.Sprintf(format, args...))
+	l.print(LevelError, fmt.Sprintf(format, args...), nil)
 }
 
 func (l *LoggerX) Fatalf(format string, args ...any) {
-	l.print(LevelFatal, fmt.Sprintf(format, args...))
+	l.print(LevelFatal, fmt.Sprintf(format, args...), nil)
 	os.Exit(1)
 }
 
 func (l *LoggerX) Panicf(format string, args ...any) {
 	value := fmt.Sprintf(format, args...)
-	l.print(LevelPanic, value)
+	l.print(LevelPanic, value, nil)
 	panic(value)
 }
 
@@ -103,14 +103,14 @@ func (l *LoggerX) ErrorWith(err error) {
 	if err != nil {
 		value = err.Error()
 	}
-	l.print(LevelError, value)
+	l.print(LevelError, value, nil)
 }
 
 func (l *LoggerX) PanicWith(err error) {
 	if err == nil {
 		return
 	}
-	l.print(LevelPanic, err.Error())
+	l.print(LevelPanic, err.Error(), nil)
 	panic(err)
 }
 
@@ -118,7 +118,7 @@ func (l *LoggerX) FatalWith(err error) {
 	if err == nil {
 		return
 	}
-	l.print(LevelFatal, err.Error())
+	l.print(LevelFatal, err.Error(), nil)
 	os.Exit(1)
 }
 
@@ -126,12 +126,12 @@ func (l *LoggerX) skipLevelLog(expect LevelType) bool {
 	return l.logLevel > expect
 }
 
-func (l *LoggerX) WithFields(fields ...Field) Logger {
+func (l *LoggerX) With(fields ...Field) Logger {
 	l.logCtx.WithFields(fields...)
 	return l
 }
 
-func (l *LoggerX) output(level LevelType, msg string, fields ...Field) {
+func (l *LoggerX) output(level LevelType, msg string, fields []Field) {
 	if l.logCtx.enc == nil {
 		return
 	}
@@ -153,7 +153,7 @@ func (l *LoggerX) output(level LevelType, msg string, fields ...Field) {
 	buf.Reset()
 	defer l.pool.Put(buf)
 
-	if err := l.logCtx.enc.Encode(buf, msg, fields...); err != nil {
+	if err := l.logCtx.enc.Encode(buf, msg, fields); err != nil {
 		return
 	}
 

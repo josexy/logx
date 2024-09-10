@@ -40,6 +40,11 @@ func (lc *LogContext) Copy() *LogContext {
 }
 
 func (lc *LogContext) WithFields(fields ...Field) *LogContext {
+	lc.preFields = append(lc.preFields, fields...)
+	return lc
+}
+
+func (lc *LogContext) WithNewFields(fields ...Field) *LogContext {
 	lc.preFields = fields
 	return lc
 }

@@ -11,31 +11,40 @@ import (
 
 type JsonEncoder struct {
 	*LogContext
-	buf          *Buffer
-	fieldsRanger sliceFields
+	buf *Buffer
 }
 
 func (enc *JsonEncoder) Init() {
-	enc.fieldsRanger = sliceFields{fields: make([]Field, 0, 64)}
-
 	if enc.callerF.enable {
 		enc.callerF.skipDepth = 7
 	}
 	enc.colors.init()
 }
 
-func (enc *JsonEncoder) Encode(buf *Buffer, msg string, fields ...Field) error {
+func (enc *JsonEncoder) Encode(buf *Buffer, msg string, fields []Field) error {
 	enc.buf = buf
-	enc.fieldsRanger.reset()
 
 	enc.writeBeginObject()
 	enc.writePromptFields()
-	enc.addPrefixFields()
-	enc.fieldsRanger.put(String(enc.msgKey, msg))
-	enc.fieldsRanger.put(fields...)
+	enc.writePrefixFields()
+	enc.writeSplitComma()
+	enc.writeMsg(msg)
 
-	enc.fieldsRanger.writeRangeFields(enc.writeField, enc.writeSplitComma)
+	n := len(fields)
+	if n == 0 {
+		enc.writeEndObject()
+		return nil
+	}
+	enc.writeSplitComma()
 
+	for i := 0; i < n; i++ {
+		if err := enc.writeField(&fields[i]); err != nil {
+			return err
+		}
+		if i+1 != n {
+			enc.writeSplitComma()
+		}
+	}
 	enc.writeEndObject()
 	return nil
 }
@@ -63,18 +72,30 @@ func (enc *JsonEncoder) writePromptFields() {
 	}
 }
 
-func (enc *JsonEncoder) addPrefixFields() {
-	if len(enc.preFields) == 0 {
+func (enc *JsonEncoder) writeMsg(msg string) {
+	enc.writeFieldKey(enc.msgKey)
+	enc.buf.WriteByte(':')
+	enc.writeFieldString(msg)
+}
+
+func (enc *JsonEncoder) writePrefixFields() {
+	n := len(enc.preFields)
+	if n == 0 {
 		return
 	}
-	enc.fieldsRanger.put(enc.preFields...)
+	for i := 0; i < n; i++ {
+		enc.writeField(&enc.preFields[i])
+		if i+1 != n {
+			enc.writeSplitComma()
+		}
+	}
 }
 
 func (enc *JsonEncoder) writeSplitComma() {
 	enc.buf.WriteByte(',')
 }
 
-func (enc *JsonEncoder) writeFieldValue(field Field) {
+func (enc *JsonEncoder) writeFieldValue(field *Field) {
 	switch field.Type {
 	case StringType:
 		enc.writeFieldString(field.StringValue)
@@ -131,7 +152,7 @@ func (enc *JsonEncoder) writeFieldValue(field Field) {
 	}
 }
 
-func (enc *JsonEncoder) writeField(field Field) error {
+func (enc *JsonEncoder) writeField(field *Field) error {
 	if field.Type == NoneType {
 		return errInvalidFieldType
 	}
@@ -339,14 +360,21 @@ func (enc *JsonEncoder) writeFieldError(value error) {
 
 func (enc *JsonEncoder) writeFieldObject(value []Field) {
 	enc.writeBeginObject()
-	fieldsRanger := sliceFields{fields: value}
-	fieldsRanger.writeRangeFields(enc.writeField, enc.writeSplitComma)
+	n := len(value)
+	for i := 0; i < n; i++ {
+		if err := enc.writeField(&value[i]); err != nil {
+			continue
+		}
+		if i+1 != n {
+			enc.writeSplitComma()
+		}
+	}
 	enc.writeEndObject()
 }
 
 func (enc *JsonEncoder) writeFieldSingleObject(value Field) {
 	enc.writeBeginObject()
-	enc.writeField(value)
+	enc.writeField(&value)
 	enc.writeEndObject()
 }
 

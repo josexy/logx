@@ -29,6 +29,8 @@ func main() {
 	loggerSimple.Info("this is an info message")
 	loggerSimple.Warn("this is a warning message")
 	loggerSimple.Error("this is an error message")
+	loggerSimple.Error("")
+	loggerSimple.With(logx.String("key", "value")).Error("")
 
 	logCtx = logCtx.Copy().
 		WithEncoder(logx.Json).
