@@ -47,7 +47,9 @@ func (enc *ConsoleEncoder) Encode(buf *Buffer, msg string, fields []Field) error
 		enc.jsonEncoder.writeEndObject()
 		return nil
 	}
-	enc.jsonEncoder.writeSplitComma()
+	if n2 > 0 {
+		enc.jsonEncoder.writeSplitComma()
+	}
 	for i := 0; i < n1; i++ {
 		if err := enc.jsonEncoder.writeField(&fields[i]); err != nil {
 			return err

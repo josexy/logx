@@ -20,8 +20,8 @@ func TestLogger() {
 		WithTime(true, logx.TimeOption{})
 
 	logger := logCtx.BuildConsoleLogger(logx.LevelTrace).With(logx.Int("id", 1000))
-	logger.Trace("hello world")
-	logger.With(logx.String("os", runtime.GOOS)).Trace("hello world")
+	logger.Trace("hello world", logx.String("key", "value"))
+	logger.With(logx.String("os", runtime.GOOS)).Trace("hello world", logx.String("key", "value"))
 	logger.With(logx.String("arch", runtime.GOARCH)).Trace("hello world")
 
 	loggerJson := logCtx.
@@ -33,10 +33,10 @@ func TestLogger() {
 	loggerJson.Info("hello world")
 
 	loggerJson2 := logCtx.Copy().WithFields(logx.String("namespace", "default")).BuildConsoleLogger(logx.LevelTrace)
-	loggerJson2.Info("hello world")
+	loggerJson2.Info("hello world", logx.String("key", "value"))
 
 	loggerJson3 := logCtx.Copy().WithNewFields(logx.String("svc", "default")).BuildConsoleLogger(logx.LevelTrace)
-	loggerJson3.Info("hello world")
+	loggerJson3.Info("hello world", logx.String("key", "value"))
 
 	loggerJson2.Info("hello world")
 }
