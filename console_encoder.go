@@ -14,6 +14,7 @@ func (enc *ConsoleEncoder) Init() {
 	enc.jsonEncoder.Init()
 	if enc.callerF.enable {
 		enc.callerF.skipDepth = 6
+		enc.callerF.skipDepth += enc.callerF.option.CallerSkip
 	}
 }
 

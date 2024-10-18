@@ -7,6 +7,16 @@ import (
 	"github.com/josexy/logx"
 )
 
+func loggerInfo(lc *logx.LogContext, msg string) {
+	logger := lc.WithCaller(true, logx.CallerOption{
+		Formatter:  logx.ShortFileFunc,
+		CallerSkip: 1,
+	}).WithEncoder(logx.Json).BuildFileLogger(logx.LevelInfo, color.Output)
+
+	logger.Info(msg)
+	logger.Debug(msg)
+}
+
 func TestLogger() {
 	logCtx := logx.NewLogContext().
 		WithFields(logx.String("module", "sub")).
@@ -39,4 +49,6 @@ func TestLogger() {
 	loggerJson3.Info("hello world", logx.String("key", "value"))
 
 	loggerJson2.Info("hello world")
+
+	loggerInfo(logCtx, "hello world")
 }

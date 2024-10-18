@@ -28,6 +28,10 @@ type CallerOption struct {
 	FuncKey string
 	// caller formatter, default: ShortFileCaller
 	Formatter CallerFormatter
+	// caller skips increases the number of callers skipped by caller annotation.
+	// when building wrappers around the Logger, supplying this Option prevents logx from always
+	// reporting the wrapper code as the caller. default: 0
+	CallerSkip int
 }
 
 type callerField struct {

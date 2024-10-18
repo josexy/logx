@@ -17,6 +17,7 @@ type JsonEncoder struct {
 func (enc *JsonEncoder) Init() {
 	if enc.callerF.enable {
 		enc.callerF.skipDepth = 7
+		enc.callerF.skipDepth += enc.callerF.option.CallerSkip
 	}
 	enc.colors.init()
 }
