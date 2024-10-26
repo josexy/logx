@@ -1,7 +1,9 @@
 package sub
 
 import (
+	"encoding/json"
 	"runtime"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/josexy/logx"
@@ -11,10 +13,30 @@ func loggerInfo(lc *logx.LogContext, msg string) {
 	logger := lc.WithCaller(true, logx.CallerOption{
 		Formatter:  logx.ShortFileFunc,
 		CallerSkip: 1,
-	}).WithEncoder(logx.Json).BuildFileLogger(logx.LevelInfo, color.Output)
+	}).WithEncoder(logx.Json).BuildConsoleLogger(logx.LevelInfo)
 
 	logger.Info(msg)
 	logger.Debug(msg)
+
+	data, _ := json.Marshal(logx.CallerOption{CallerKey: "caller"})
+	var r1 map[string]any
+	json.Unmarshal(data, &r1)
+	mapRes := map[string]any{
+		"id":           10001,
+		"name":         "guest",
+		"created_time": time.Now(),
+		"info": map[string]any{
+			"k1": "127.0.0.1",
+			"k2": logx.Array("array", "10", 20, false, []string{"a", "b"},
+				[]map[string]any{{"k3": 10, "ok": true}, r1, {"k3": 20}, {"k3": 30}}),
+			"k3": []int{10, 20, 30},
+			"k4": r1,
+			"k5": []map[string]any{r1, r1}, // use map[string]any type formatter
+			"k6": map[any]any{"xx": true},  // fallback to final any type formatter
+		},
+	}
+	logger.Warn(msg, logx.Any("any", mapRes))
+	logger.Warn(msg, logx.Array("list", mapRes, []map[string]any{mapRes, mapRes}))
 }
 
 func TestLogger() {
@@ -50,5 +72,5 @@ func TestLogger() {
 
 	loggerJson2.Info("hello world")
 
-	loggerInfo(logCtx, "hello world")
+	loggerInfo(logCtx.Copy(), "hello world")
 }

@@ -22,7 +22,7 @@ type timeField struct {
 
 func (t *timeField) formatJson(enc *JsonEncoder) {
 	enc.writeFieldKey(t.option.TimeKey)
-	enc.buf.WriteByte(':')
+	enc.writeSplitColon()
 
 	switch val := t.value(); val.(type) {
 	case string:

@@ -50,6 +50,8 @@ func (c *callerField) formatJson(enc *JsonEncoder) {
 	if len(funcName) > 0 {
 		fields = append(fields, String(c.option.FuncKey, funcName))
 	}
+	enc.writeFieldKey(c.option.CallerKey)
+	enc.writeSplitColon()
 	enc.writeFieldObject(fields)
 }
 

@@ -75,7 +75,7 @@ func (enc *JsonEncoder) writePromptFields() {
 
 func (enc *JsonEncoder) writeMsg(msg string) {
 	enc.writeFieldKey(enc.msgKey)
-	enc.buf.WriteByte(':')
+	enc.writeSplitColon()
 	enc.writeFieldString(msg)
 }
 
@@ -94,6 +94,10 @@ func (enc *JsonEncoder) writePrefixFields() {
 
 func (enc *JsonEncoder) writeSplitComma() {
 	enc.buf.WriteByte(',')
+}
+
+func (enc *JsonEncoder) writeSplitColon() {
+	enc.buf.WriteByte(':')
 }
 
 func (enc *JsonEncoder) writeFieldValue(field *Field) {
@@ -158,7 +162,7 @@ func (enc *JsonEncoder) writeField(field *Field) error {
 		return errInvalidFieldType
 	}
 	enc.writeFieldKey(field.Key)
-	enc.buf.WriteByte(':')
+	enc.writeSplitColon()
 	enc.writeFieldValue(field)
 	return nil
 }
@@ -359,6 +363,22 @@ func (enc *JsonEncoder) writeFieldError(value error) {
 	}
 }
 
+func (enc *JsonEncoder) writeMapObject(value map[string]any) {
+	enc.writeBeginObject()
+	// the key-values are unsorted!!!
+	i, n := 0, len(value)
+	for k, v := range value {
+		enc.writeFieldKey(k)
+		enc.writeSplitColon()
+		enc.writeFieldAny(v)
+		if i+1 != n {
+			enc.writeSplitComma()
+		}
+		i++
+	}
+	enc.writeEndObject()
+}
+
 func (enc *JsonEncoder) writeFieldObject(value []Field) {
 	enc.writeBeginObject()
 	n := len(value)
@@ -454,6 +474,8 @@ func (enc *JsonEncoder) writeFieldAny(value any) {
 		writeFieldArrayListFor(v, enc, func(s time.Duration) { enc.writeFieldDuration(s) }, enc.writeSplitComma)
 	case []error:
 		writeFieldArrayListFor(v, enc, func(s error) { enc.writeFieldError(s) }, enc.writeSplitComma)
+	case []map[string]any:
+		writeFieldArrayListFor(v, enc, func(s map[string]any) { enc.writeMapObject(s) }, enc.writeSplitComma)
 	case []Field:
 		enc.writeFieldObject(v)
 	case []any:
@@ -490,6 +512,8 @@ func (enc *JsonEncoder) writeFieldAny(value any) {
 		enc.writeFieldTime(v)
 	case time.Duration:
 		enc.writeFieldDuration(v)
+	case map[string]any:
+		enc.writeMapObject(v)
 	case error:
 		enc.writeFieldError(v)
 	case Field:

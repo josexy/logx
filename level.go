@@ -58,7 +58,7 @@ type levelField struct {
 
 func (lvl *levelField) formatJson(enc *JsonEncoder) {
 	enc.writeFieldKey(lvl.option.LevelKey)
-	enc.buf.WriteByte(':')
+	enc.writeSplitColon()
 	enc.writeFieldStringPrimitive(lvl.String())
 }
 
