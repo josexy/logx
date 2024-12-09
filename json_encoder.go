@@ -27,8 +27,9 @@ func (enc *JsonEncoder) Encode(buf *Buffer, msg string, fields []Field) error {
 
 	enc.writeBeginObject()
 	enc.writePromptFields()
-	enc.writePrefixFields()
-	enc.writeSplitComma()
+	if enc.writePrefixFields() {
+		enc.writeSplitComma()
+	}
 	enc.writeMsg(msg)
 
 	n := len(fields)
@@ -79,10 +80,10 @@ func (enc *JsonEncoder) writeMsg(msg string) {
 	enc.writeFieldString(msg)
 }
 
-func (enc *JsonEncoder) writePrefixFields() {
+func (enc *JsonEncoder) writePrefixFields() bool {
 	n := len(enc.preFields)
 	if n == 0 {
-		return
+		return false
 	}
 	for i := 0; i < n; i++ {
 		enc.writeField(&enc.preFields[i])
@@ -90,6 +91,7 @@ func (enc *JsonEncoder) writePrefixFields() {
 			enc.writeSplitComma()
 		}
 	}
+	return true
 }
 
 func (enc *JsonEncoder) writeSplitComma() {
