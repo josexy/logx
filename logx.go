@@ -126,9 +126,24 @@ func (l *LoggerX) skipLevelLog(expect LevelType) bool {
 	return l.logLevel > expect
 }
 
+func (l *LoggerX) clone() *LoggerX {
+	clone := &LoggerX{
+		logLevel: l.logLevel,
+		logCtx:   l.logCtx.Copy(),
+		pool: sync.Pool{
+			New: func() any { return NewBuffer(make([]byte, 0, 1024)) },
+		},
+	}
+	if clone.logCtx.enc != nil {
+		clone.logCtx.enc.Init()
+	}
+	return clone
+}
+
 func (l *LoggerX) With(fields ...Field) Logger {
-	l.logCtx.WithFields(fields...)
-	return l
+	nl := l.clone()
+	nl.logCtx = nl.logCtx.WithFields(fields...)
+	return nl
 }
 
 func (l *LoggerX) output(level LevelType, msg string, fields []Field) {
