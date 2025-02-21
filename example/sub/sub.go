@@ -33,6 +33,14 @@ func loggerInfo(lc *logx.LogContext, msg string) {
 			"k4": r1,
 			"k5": []map[string]any{r1, r1}, // use map[string]any type formatter
 			"k6": map[any]any{"xx": true},  // fallback to final any type formatter
+			"kvs": map[string]string{
+				"version": "v1",
+				"env":     "dev",
+			},
+		},
+		"kvs": map[string]string{
+			"version": "v1",
+			"env":     "dev",
 		},
 	}
 	logger.Warn(msg, logx.Any("any", mapRes))

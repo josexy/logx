@@ -365,7 +365,7 @@ func (enc *JsonEncoder) writeFieldError(value error) {
 	}
 }
 
-func (enc *JsonEncoder) writeMapObject(value map[string]any) {
+func (enc *JsonEncoder) writeMapObjectForAnyValue(value map[string]any) {
 	enc.writeBeginObject()
 	// the key-values are unsorted!!!
 	i, n := 0, len(value)
@@ -373,6 +373,22 @@ func (enc *JsonEncoder) writeMapObject(value map[string]any) {
 		enc.writeFieldKey(k)
 		enc.writeSplitColon()
 		enc.writeFieldAny(v)
+		if i+1 != n {
+			enc.writeSplitComma()
+		}
+		i++
+	}
+	enc.writeEndObject()
+}
+
+func (enc *JsonEncoder) writeMapObjectForStringValue(value map[string]string) {
+	enc.writeBeginObject()
+	// the key-values are unsorted!!!
+	i, n := 0, len(value)
+	for k, v := range value {
+		enc.writeFieldKey(k)
+		enc.writeSplitColon()
+		enc.writeFieldString(v)
 		if i+1 != n {
 			enc.writeSplitComma()
 		}
@@ -477,7 +493,9 @@ func (enc *JsonEncoder) writeFieldAny(value any) {
 	case []error:
 		writeFieldArrayListFor(v, enc, func(s error) { enc.writeFieldError(s) }, enc.writeSplitComma)
 	case []map[string]any:
-		writeFieldArrayListFor(v, enc, func(s map[string]any) { enc.writeMapObject(s) }, enc.writeSplitComma)
+		writeFieldArrayListFor(v, enc, func(s map[string]any) { enc.writeMapObjectForAnyValue(s) }, enc.writeSplitComma)
+	case []map[string]string:
+		writeFieldArrayListFor(v, enc, func(s map[string]string) { enc.writeMapObjectForStringValue(s) }, enc.writeSplitComma)
 	case []Field:
 		enc.writeFieldObject(v)
 	case []any:
@@ -515,7 +533,9 @@ func (enc *JsonEncoder) writeFieldAny(value any) {
 	case time.Duration:
 		enc.writeFieldDuration(v)
 	case map[string]any:
-		enc.writeMapObject(v)
+		enc.writeMapObjectForAnyValue(v)
+	case map[string]string:
+		enc.writeMapObjectForStringValue(v)
 	case error:
 		enc.writeFieldError(v)
 	case Field:
