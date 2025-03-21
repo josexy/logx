@@ -24,7 +24,7 @@ go get github.com/josexy/logx
 ```go
 func main() {
 	// Create a simple console logger with default settings
-	logger := logx.NewLogContext().WithWriter(os.Stdout).BuildConsoleLogger(logx.LevelTrace)
+	logger := logx.NewLogContext().WithLevel(logx.LevelTrace).WithWriter(os.Stdout).Build()
 	logger.Info("Hello logx!")
 }
 ```
@@ -33,15 +33,16 @@ func main() {
 
 ```go
 func main() {
-	logCtx = logx.NewLogContext().
-		WithColorfulset(true, logx.TextColorAttri{}). // Enable colored output
-		WithLevel(true, logx.LevelOption{}).          // Show log level
-		WithCaller(true, logx.CallerOption{}).        // Show caller information
-		WithWriter(logx.AddSync(color.Output)).       // Set output writer
-		WithEncoder(logx.Console).                    // Use console encoder
-		WithTime(true, logx.TimeOption{Formatter: func(t time.Time) any { return t.Format(time.DateTime) }}) 	// Customize time format
+	logCtx := logx.NewLogContext().
+		WithLevel(logx.LevelTrace).
+		WithColorfulset(true, logx.TextColorAttri{}).                                                           // Enable colored output
+		WithLevelKey(true, logx.LevelOption{}).                                                                 // Show log level
+		WithCallerKey(true, logx.CallerOption{}).                                                               // Show caller information
+		WithWriter(logx.AddSync(color.Output)).                                                                 // Set output writer
+		WithEncoder(logx.Console).                                                                              // Use console encoder
+		WithTimeKey(true, logx.TimeOption{Formatter: func(t time.Time) any { return t.Format(time.DateTime) }}) // Customize time format
 
-	logger := logCtx.BuildConsoleLogger(logx.LevelTrace)
+	logger := logCtx.Build()
 
 	// Different log levels with structured fields
 	logger.Trace("this is a trace message", logx.String("key", "value"), logx.Int("key", 2222))
@@ -49,6 +50,7 @@ func main() {
 	logger.Info("this is an info message")
 	logger.Warn("this is a warning message")
 	logger.Error("this is an error message")
+	logger.With(logx.String("os", runtime.GOOS)).Debug("this is a debug message")
 }
 ```
 
