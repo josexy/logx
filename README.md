@@ -24,7 +24,7 @@ go get github.com/josexy/logx
 ```go
 func main() {
 	// Create a simple console logger with default settings
-	logger := logx.NewLogContext().WithLevel(logx.LevelTrace).WithWriter(os.Stdout).Build()
+	logger := logx.NewLogContext().WithLevel(logx.LevelTrace).WithEncoder(logx.Console).WithWriter(os.Stdout).Build()
 	logger.Info("Hello logx!")
 }
 ```
@@ -51,7 +51,22 @@ func main() {
 	logger.Warn("this is a warning message")
 	logger.Error("this is an error message")
 	logger.With(logx.String("os", runtime.GOOS)).Debug("this is a debug message")
+
+	logger2 := logCtx.Copy().WithFields(logx.String("arch", runtime.GOARCH)).WithEncoder(logx.Json).Build()
+	logger2.Debug("this is a debug message")
 }
+```
+
+output:
+
+```
+2025-03-21 16:12:21     TRACE   example/main.go:213     this is a trace message {"key":"value","key":2222}
+2025-03-21 16:12:21     DEBUG   example/main.go:214     this is a debug message
+2025-03-21 16:12:21     INFO    example/main.go:215     this is an info message
+2025-03-21 16:12:21     WARN    example/main.go:216     this is a warning message
+2025-03-21 16:12:21     ERROR   example/main.go:217     this is an error message
+2025-03-21 16:12:21     DEBUG   example/main.go:218     this is a debug message {"os":"linux"}
+{"level":"DEBUG","time":"2025-03-21 16:12:21","caller":{"file":"example/main.go:221"},"arch":"amd64","msg":"this is a debug message"}
 ```
 
 ## License
