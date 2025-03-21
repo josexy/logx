@@ -10,10 +10,10 @@ import (
 )
 
 func loggerInfo(lc *logx.LogContext, msg string) {
-	logger := lc.WithCaller(true, logx.CallerOption{
+	logger := lc.WithCallerKey(true, logx.CallerOption{
 		Formatter:  logx.ShortFileFunc,
 		CallerSkip: 1,
-	}).WithEncoder(logx.Json).BuildConsoleLogger(logx.LevelInfo)
+	}).WithEncoder(logx.Json).Build()
 
 	logger.Info(msg)
 	logger.Debug(msg)
@@ -52,30 +52,32 @@ func TestLogger() {
 		WithFields(logx.String("module", "sub")).
 		WithMsgKey("message").
 		WithColorfulset(true, logx.TextColorAttri{}).
-		WithLevel(true, logx.LevelOption{LowerKey: true}).
-		WithCaller(true, logx.CallerOption{Formatter: logx.FullFile}).
-		WithWriter(logx.AddSync(color.Output)).
+		WithLevel(logx.LevelTrace).
+		WithLevelKey(true, logx.LevelOption{LowerKey: true}).
+		WithCallerKey(true, logx.CallerOption{Formatter: logx.FullFile}).
+		WithWriter(logx.Lock(logx.AddSync(color.Output))).
 		// WithWriter(logx.AddSync(nil)).
 		WithEncoder(logx.Console).
-		WithTime(true, logx.TimeOption{})
+		WithTimeKey(true, logx.TimeOption{})
 
-	logger := logCtx.BuildConsoleLogger(logx.LevelTrace).With(logx.Int("id", 1000))
+	logger := logCtx.Build().With(logx.Int("id", 1000))
 	logger.Trace("hello world", logx.String("key", "value"))
 	logger.With(logx.String("os", runtime.GOOS)).Trace("hello world", logx.String("key", "value"))
 	logger.With(logx.String("arch", runtime.GOARCH)).Trace("hello world")
 
 	loggerJson := logCtx.
-		WithCaller(true, logx.CallerOption{
+		WithLevel(logx.LevelInfo).
+		WithCallerKey(true, logx.CallerOption{
 			FuncKey:   "function",
 			Formatter: logx.FullFileFunc,
 		}).
-		WithEncoder(logx.Json).BuildConsoleLogger(logx.LevelInfo)
+		WithEncoder(logx.Json).Build()
 	loggerJson.Info("hello world")
 
-	loggerJson2 := logCtx.Copy().WithFields(logx.String("namespace", "default")).BuildConsoleLogger(logx.LevelTrace)
+	loggerJson2 := logCtx.Copy().WithFields(logx.String("namespace", "default")).Build()
 	loggerJson2.Info("hello world", logx.String("key", "value"))
 
-	loggerJson3 := logCtx.Copy().WithNewFields(logx.String("svc", "default")).BuildConsoleLogger(logx.LevelTrace)
+	loggerJson3 := logCtx.Copy().WithNewFields(logx.String("svc", "default")).Build()
 	loggerJson3.Info("hello world", logx.String("key", "value"))
 
 	loggerJson2.Info("hello world")

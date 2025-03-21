@@ -2,9 +2,14 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"runtime"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -15,26 +20,28 @@ import (
 func main() {
 	logCtx := logx.NewLogContext().
 		WithColorfulset(true, logx.TextColorAttri{}).
-		WithLevel(true, logx.LevelOption{}).
-		WithCaller(true, logx.CallerOption{Formatter: logx.FullFile}).
-		WithWriter(logx.AddSync(color.Output)).
+		WithLevel(logx.LevelTrace).
+		WithLevelKey(true, logx.LevelOption{}).
+		WithCallerKey(true, logx.CallerOption{Formatter: logx.FullFile}).
+		WithWriter(logx.Lock(logx.AddSync(color.Output))).
 		// WithWriter(logx.AddSync(nil)).
 		WithEncoder(logx.Console).
 		WithEscapeQuote(true).
-		WithTime(true, logx.TimeOption{Formatter: func(t time.Time) any { return t.Format(time.DateTime) }})
+		WithTimeKey(true, logx.TimeOption{Formatter: func(t time.Time) any { return t.Format(time.DateTime) }})
 
-	loggerSimple := logCtx.BuildConsoleLogger(logx.LevelTrace)
+	loggerSimple := logCtx.Build()
 	loggerSimple.Trace("this is a trace message", logx.String("key", "value"), logx.Int("key", 2222))
 	loggerSimple.Debug("this is a debug message")
 	loggerSimple.Info("this is an info message")
 	loggerSimple.Warn("this is a warning message")
 	loggerSimple.Error("this is an error message")
 	loggerSimple.Error("")
+	loggerSimple.Error("", logx.String("key", "value"))
 	loggerSimple.With(logx.String("key", "value")).Error("")
 
 	logCtx = logCtx.Copy().
 		WithEncoder(logx.Json).
-		WithCaller(true, logx.CallerOption{Formatter: logx.ShortFileFunc}).
+		WithCallerKey(true, logx.CallerOption{Formatter: logx.ShortFileFunc}).
 		WithEscapeQuote(true)
 
 	// file, err := os.Create("test.log")
@@ -42,12 +49,13 @@ func main() {
 	// 	panic(err)
 	// }
 	// defer file.Close()
-	// loggerJson := logCtx.WithEncoder(logx.Json).BuildFileLogger(logx.LevelInfo, io.MultiWriter(file, os.Stdout))
+	// loggerJson := logCtx.WithLevel(logx.LevelInfo).WithWriter(logx.Lock(logx.AddSync(file))).WithEncoder(logx.Json).Build()
 
 	loggerJson := logCtx.WithEncoder(logx.Json).
 		WithReflectValue(true).
+		WithWriter(logx.AddSync(io.MultiWriter(color.Output))).
 		WithFields(logx.String("os", runtime.GOOS), logx.String("arch", runtime.GOARCH)).
-		BuildConsoleLogger(logx.LevelTrace)
+		Build()
 
 	loggerJson.Trace("this is a trace message")
 	loggerJson.Debug("this is a debug message")
@@ -143,4 +151,46 @@ func main() {
 	loggerSimple.Tracef("hello \"%s\"", "world")
 
 	sub.TestLogger()
+
+	goroutinesPrintLogs()
+}
+
+func goroutinesPrintLogs() {
+	file, err := os.Create(filepath.Join(os.TempDir(), "test"))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(file.Name())
+	defer file.Close()
+
+	lc := logx.NewLogContext().
+		WithLevelKey(true, logx.LevelOption{}).
+		WithTimeKey(true, logx.TimeOption{
+			Formatter: func(t time.Time) any {
+				return t.Format("2006/01/02 15:04:05.000")
+			},
+		}).
+		WithCallerKey(true, logx.CallerOption{}).
+		WithLevel(logx.LevelInfo).
+		WithWriter(logx.AddSync(file)).
+		WithEncoder(logx.Console)
+
+	logger := lc.Copy().Build()
+	logger2 := lc.Copy().Build()
+	logger.Info("hello")
+	logger2.Info("hello")
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			logger.Info("hello" + strconv.Itoa(i))
+		}()
+		go func() {
+			defer wg.Done()
+			logger2.Info("hello" + strconv.Itoa(i))
+		}()
+	}
+	wg.Wait()
 }
