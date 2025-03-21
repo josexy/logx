@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+var jsonPool = sync.Pool{New: func() any { return &JsonEncoder{} }}
+
 type JsonEncoder struct {
 	*LogContext
 	buf *Buffer
@@ -22,33 +24,51 @@ func (enc *JsonEncoder) Init() {
 	enc.colors.init()
 }
 
-func (enc *JsonEncoder) Encode(buf *Buffer, msg string, fields []Field) error {
-	enc.buf = buf
+func (enc *JsonEncoder) clone() *JsonEncoder {
+	clone := jsonPool.Get().(*JsonEncoder)
+	clone.LogContext = enc.LogContext
+	clone.buf = bufPool.Get().(*Buffer)
+	clone.buf.Reset()
+	return clone
+}
 
-	enc.writeBeginObject()
-	enc.writePromptFields()
-	if enc.writePrefixFields() {
-		enc.writeSplitComma()
+func putJsonEncoder(enc *JsonEncoder) {
+	enc.LogContext = nil
+	enc.buf = nil
+	jsonPool.Put(enc)
+}
+
+func (enc *JsonEncoder) Encode(ent entry, fields []Field) (ret *Buffer, err error) {
+	nenc := enc.clone()
+	defer putJsonEncoder(nenc)
+
+	nenc.writeBeginObject()
+	nenc.writePromptFields(&ent)
+	if nenc.writePrefixFields() {
+		nenc.writeSplitComma()
 	}
-	enc.writeMsg(msg)
+	nenc.writeMsg(ent.message)
 
 	n := len(fields)
 	if n == 0 {
-		enc.writeEndObject()
-		return nil
+		nenc.writeEndObject()
+		ret = nenc.buf
+		return
 	}
-	enc.writeSplitComma()
+	nenc.writeSplitComma()
 
 	for i := 0; i < n; i++ {
-		if err := enc.writeField(&fields[i]); err != nil {
-			return err
+		if err = nenc.writeField(&fields[i]); err != nil {
+			bufPool.Put(nenc.buf)
+			return
 		}
 		if i+1 != n {
-			enc.writeSplitComma()
+			nenc.writeSplitComma()
 		}
 	}
-	enc.writeEndObject()
-	return nil
+	nenc.writeEndObject()
+	ret = nenc.buf
+	return
 }
 
 func (enc *JsonEncoder) writeBeginObject() { enc.buf.WriteByte('{') }
@@ -59,13 +79,13 @@ func (enc *JsonEncoder) writeBeginArray() { enc.buf.WriteByte('[') }
 
 func (enc *JsonEncoder) writeEndArray() { enc.buf.WriteByte(']') }
 
-func (enc *JsonEncoder) writePromptFields() {
+func (enc *JsonEncoder) writePromptFields(ent *entry) {
 	if enc.levelF.enable {
-		enc.levelF.formatJson(enc)
+		enc.levelF.formatJson(enc, ent)
 		enc.writeSplitComma()
 	}
 	if enc.timeF.enable {
-		enc.timeF.formatJson(enc)
+		enc.timeF.formatJson(enc, ent)
 		enc.writeSplitComma()
 	}
 	if enc.callerF.enable {

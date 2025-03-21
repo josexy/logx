@@ -1,12 +1,16 @@
 package logx
 
 import (
-	"io"
 	"sync"
 	"time"
 )
 
+var bufPool = sync.Pool{
+	New: func() any { return NewBuffer(make([]byte, 0, 1024)) },
+}
+
 type LogContext struct {
+	levelT       LevelType
 	levelF       levelField
 	timeF        timeField
 	callerF      callerField
@@ -68,7 +72,7 @@ func (lc *LogContext) WithMsgKey(key string) *LogContext {
 	return lc
 }
 
-func (lc *LogContext) WithLevel(enable bool, option LevelOption) *LogContext {
+func (lc *LogContext) WithLevelKey(enable bool, option LevelOption) *LogContext {
 	lc.levelF.enable = enable
 	if enable {
 		if len(option.LevelKey) == 0 {
@@ -79,7 +83,7 @@ func (lc *LogContext) WithLevel(enable bool, option LevelOption) *LogContext {
 	return lc
 }
 
-func (lc *LogContext) WithTime(enable bool, option TimeOption) *LogContext {
+func (lc *LogContext) WithTimeKey(enable bool, option TimeOption) *LogContext {
 	lc.timeF.enable = enable
 	if enable {
 		if len(option.TimeKey) == 0 {
@@ -93,7 +97,7 @@ func (lc *LogContext) WithTime(enable bool, option TimeOption) *LogContext {
 	return lc
 }
 
-func (lc *LogContext) WithCaller(enable bool, option CallerOption) *LogContext {
+func (lc *LogContext) WithCallerKey(enable bool, option CallerOption) *LogContext {
 	lc.callerF.enable = enable
 	if enable {
 		if len(option.CallerKey) == 0 {
@@ -140,31 +144,15 @@ func (lc *LogContext) WithEncoder(encoder EncoderType) *LogContext {
 	return lc
 }
 
-func (lc *LogContext) BuildConsoleLogger(level LevelType) Logger {
-	if lc.enc != nil {
-		lc.enc.Init()
-	}
-	lc.WithMsgKey(lc.msgKey)
-	return &LoggerX{
-		logCtx:   lc,
-		logLevel: level,
-		pool: sync.Pool{
-			New: func() any { return NewBuffer(make([]byte, 0, 1024)) },
-		},
-	}
+func (lc *LogContext) WithLevel(level LevelType) *LogContext {
+	lc.levelT = level
+	return lc
 }
 
-func (lc *LogContext) BuildFileLogger(level LevelType, writer io.Writer) Logger {
-	// For file logger, need to disable color attributes
-	lc = lc.WithColorfulset(false, TextColorAttri{}).WithMsgKey(lc.msgKey).WithWriter(AddSync(writer))
+func (lc *LogContext) Build() Logger {
+	lc.WithMsgKey(lc.msgKey)
 	if lc.enc != nil {
 		lc.enc.Init()
 	}
-	return &LoggerX{
-		logCtx:   lc,
-		logLevel: level,
-		pool: sync.Pool{
-			New: func() any { return NewBuffer(make([]byte, 0, 1024)) },
-		},
-	}
+	return &LoggerX{logCtx: lc}
 }

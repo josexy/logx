@@ -52,27 +52,26 @@ type LevelOption struct {
 type levelField struct {
 	enable bool
 	color  bool
-	typ    LevelType
 	option LevelOption
 }
 
-func (lvl *levelField) formatJson(enc *JsonEncoder) {
+func (lvl *levelField) formatJson(enc *JsonEncoder, ent *entry) {
 	enc.writeFieldKey(lvl.option.LevelKey)
 	enc.writeSplitColon()
-	enc.writeFieldStringPrimitive(lvl.String())
+	enc.writeFieldStringPrimitive(lvl.String(ent))
 }
 
-func (lvl *levelField) String() (out string) {
+func (lvl *levelField) String(ent *entry) (out string) {
 	if !lvl.enable {
 		return
 	}
 	if lvl.option.LowerKey {
-		out = levelTypeLowerMap[lvl.typ]
+		out = levelTypeLowerMap[ent.level]
 	} else {
-		out = levelTypeUpperMap[lvl.typ]
+		out = levelTypeUpperMap[ent.level]
 	}
 	if lvl.color && len(out) > 0 {
-		out = levelTypeColorMap[lvl.typ](out)
+		out = levelTypeColorMap[ent.level](out)
 	}
 	return
 }

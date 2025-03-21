@@ -16,15 +16,14 @@ type TimeOption struct {
 type timeField struct {
 	enable bool
 	color  bool
-	now    time.Time
 	option TimeOption
 }
 
-func (t *timeField) formatJson(enc *JsonEncoder) {
+func (t *timeField) formatJson(enc *JsonEncoder, ent *entry) {
 	enc.writeFieldKey(t.option.TimeKey)
 	enc.writeSplitColon()
 
-	switch val := t.value(); val.(type) {
+	switch val := t.value(ent); val.(type) {
 	case string:
 		enc.writeFieldString(val.(string))
 	case int64:
@@ -38,17 +37,17 @@ func (t *timeField) formatJson(enc *JsonEncoder) {
 	}
 }
 
-func (t *timeField) value() (out any) {
+func (t *timeField) value(ent *entry) (out any) {
 	if !t.enable {
 		return
 	}
-	out = t.option.Formatter(t.now)
+	out = t.option.Formatter(ent.time)
 	return
 }
 
-func (t *timeField) String() string {
+func (t *timeField) String(ent *entry) string {
 	var out string
-	switch val := t.value(); val.(type) {
+	switch val := t.value(ent); val.(type) {
 	case string:
 		out = val.(string)
 	case int64:

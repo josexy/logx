@@ -29,11 +29,38 @@ func AddSync(w io.Writer) WriteSyncer {
 	}
 }
 
+type lockedWriteSyncer struct {
+	sync.Mutex
+	ws WriteSyncer
+}
+
+func (s *lockedWriteSyncer) Write(bs []byte) (int, error) {
+	s.Lock()
+	n, err := s.ws.Write(bs)
+	s.Unlock()
+	return n, err
+}
+
+func (s *lockedWriteSyncer) Sync() error {
+	s.Lock()
+	err := s.ws.Sync()
+	s.Unlock()
+	return err
+}
+
+// Lock wraps a WriteSyncer in a mutex to make it safe for concurrent use. In
+// particular, *os.Files must be locked before use.
+// See zap log
+func Lock(ws WriteSyncer) WriteSyncer {
+	if _, ok := ws.(*lockedWriteSyncer); ok {
+		// no need to layer on another lock
+		return ws
+	}
+	return &lockedWriteSyncer{ws: ws}
+}
+
 type LoggerX struct {
-	mu       sync.Mutex
-	logLevel LevelType
-	logCtx   *LogContext
-	pool     sync.Pool
+	logCtx *LogContext
 }
 
 func (l *LoggerX) print(level LevelType, msg string, fields []Field) {
@@ -123,17 +150,11 @@ func (l *LoggerX) FatalWith(err error) {
 }
 
 func (l *LoggerX) skipLevelLog(expect LevelType) bool {
-	return l.logLevel > expect
+	return l.logCtx.levelT > expect
 }
 
 func (l *LoggerX) clone() *LoggerX {
-	clone := &LoggerX{
-		logLevel: l.logLevel,
-		logCtx:   l.logCtx.Copy(),
-		pool: sync.Pool{
-			New: func() any { return NewBuffer(make([]byte, 0, 1024)) },
-		},
-	}
+	clone := &LoggerX{logCtx: l.logCtx.Copy()}
 	if clone.logCtx.enc != nil {
 		clone.logCtx.enc.Init()
 	}
@@ -151,30 +172,24 @@ func (l *LoggerX) output(level LevelType, msg string, fields []Field) {
 		return
 	}
 
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if l.logCtx.timeF.enable {
-		l.logCtx.timeF.now = time.Now()
-	}
-	if l.logCtx.levelF.enable {
-		if level > LevelPanic {
-			level = LevelPanic
-		}
-		l.logCtx.levelF.typ = level
+	ent := entry{
+		level:   level,
+		message: msg,
+		time:    time.Now(),
 	}
 
-	buf := l.pool.Get().(*Buffer)
-	buf.Reset()
-	defer l.pool.Put(buf)
-
-	if err := l.logCtx.enc.Encode(buf, msg, fields); err != nil {
+	var buf *Buffer
+	var err error
+	if buf, err = l.logCtx.enc.Encode(ent, fields); err != nil {
 		return
 	}
-
 	if buf.Len() > 0 && buf.Bytes()[buf.Len()-1] != '\n' {
 		buf.WriteByte('\n')
 	}
 	l.logCtx.writer.Write(buf.Bytes())
-	l.logCtx.writer.Sync()
+	bufPool.Put(buf)
+
+	if l.logCtx.levelT > LevelError {
+		_ = l.logCtx.writer.Sync()
+	}
 }

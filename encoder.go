@@ -1,5 +1,7 @@
 package logx
 
+import "time"
+
 type EncoderType byte
 
 const (
@@ -7,7 +9,13 @@ const (
 	Json
 )
 
+type entry struct {
+	level   LevelType
+	time    time.Time
+	message string
+}
+
 type encoder interface {
 	Init()
-	Encode(*Buffer, string, []Field) error
+	Encode(entry, []Field) (*Buffer, error)
 }

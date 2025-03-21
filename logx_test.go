@@ -1,6 +1,9 @@
 package logx
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -15,15 +18,16 @@ import (
 
 func TestConsoleLogger(t *testing.T) {
 	logCtx := NewLogContext().
+		WithLevel(LevelTrace).
 		WithColorfulset(true, TextColorAttri{}).
-		WithLevel(true, LevelOption{}).
-		WithCaller(true, CallerOption{}).
-		WithTime(true, TimeOption{}).
+		WithLevelKey(true, LevelOption{}).
+		WithCallerKey(true, CallerOption{}).
+		WithTimeKey(true, TimeOption{}).
 		WithWriter(AddSync(color.Output)).
 		WithFields(String("arch", runtime.GOARCH), Bool("bool", true)).
 		WithEncoder(Console)
 
-	logger := logCtx.BuildConsoleLogger(LevelTrace)
+	logger := logCtx.Build()
 	logger.Debug("")
 	logger.Debug("this is a debug message")
 	logger.Info("this is an info message")
@@ -47,32 +51,35 @@ func TestConsoleLogger(t *testing.T) {
 		logger.Panic("panic", Int("code", 255))
 	}()
 
-	newLogCtx := logCtx.Copy().WithTime(false, TimeOption{}).WithCaller(false, CallerOption{}).WithEncoder(Json)
-	newLogger := newLogCtx.BuildConsoleLogger(LevelInfo)
+	newLogCtx := logCtx.Copy().WithLevel(LevelInfo).WithTimeKey(false, TimeOption{}).WithCallerKey(false, CallerOption{}).WithEncoder(Json)
+	newLogger := newLogCtx.Build()
 	newLogger.Trace("trace", Time("ts", time.Now()))
 	newLogger.Debugf("debug")
 	newLogger.Info("info", Time("ts", time.Now()))
 	newLogger.ErrorWith(io.EOF)
 
-	newLogCtx.WithLevel(true, LevelOption{LevelKey: "ts", LowerKey: true}).WithFields()
+	newLogCtx.WithLevelKey(true, LevelOption{LevelKey: "ts", LowerKey: true}).WithFields()
 
-	newLogger2 := newLogCtx.Copy().WithTime(true, TimeOption{}).
-		WithLevel(true, LevelOption{}).WithEncoder(Console).BuildConsoleLogger(LevelInfo)
+	newLogger2 := newLogCtx.Copy().WithTimeKey(true, TimeOption{}).
+		WithLevelKey(true, LevelOption{}).WithEncoder(Console).Build()
 	newLogger.Info("info", Time("ts", time.Now()))
 	newLogger2.Info("info", Time("ts", time.Now()))
 }
 
 func TestJsonLogger(t *testing.T) {
+	buffer := bytes.NewBuffer(nil)
 	logger := NewLogContext().
 		WithColorfulset(true, TextColorAttri{}).
 		WithFields(String("os", runtime.GOOS), String("arch", runtime.GOARCH)).
-		WithLevel(true, LevelOption{}).
-		WithCaller(true, CallerOption{Formatter: FullFileFunc}).
-		WithWriter(AddSync(color.Output)).
-		WithTime(true, TimeOption{Formatter: func(t time.Time) any { return t.Format(time.DateTime) }}).
+		WithLevel(LevelTrace).
+		WithLevelKey(true, LevelOption{}).
+		WithCallerKey(true, CallerOption{Formatter: FullFileFunc}).
+		WithWriter(AddSync(io.MultiWriter(buffer, color.Output))).
+		WithTimeKey(true, TimeOption{Formatter: func(t time.Time) any { return t.Format(time.DateTime) }}).
 		WithEncoder(Json).
+		WithEscapeQuote(true).
 		WithReflectValue(true).
-		BuildConsoleLogger(LevelTrace)
+		Build()
 
 	logger.Trace("this is a trace message")
 	logger.Debug("this is a debug message")
@@ -153,6 +160,16 @@ func TestJsonLogger(t *testing.T) {
 	))
 	logger.Trace("trace", Object("obj", Object("obj2", Object("obj3"))))
 	logger.Infof("hello %s", "world")
+
+	br := bufio.NewScanner(buffer)
+	for br.Scan() {
+		data := br.Text()
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(data), &obj); err != nil {
+			t.Fatalf("invalid json data: %s, err: %v", data, err)
+		}
+		t.Logf("%+v", obj)
+	}
 }
 
 type nullWriter struct{}
@@ -194,7 +211,7 @@ func BenchmarkSlogJsonLogger(b *testing.B) {
 
 func BenchmarkConsoleLogger(b *testing.B) {
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Console).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Console).Build()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info("this is a message")
@@ -203,7 +220,7 @@ func BenchmarkConsoleLogger(b *testing.B) {
 
 func BenchmarkJsonLogger(b *testing.B) {
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Json).Build()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info("this is a message")
@@ -212,7 +229,7 @@ func BenchmarkJsonLogger(b *testing.B) {
 
 func BenchmarkConsoleLoggerWithEscapeQuote(b *testing.B) {
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEscapeQuote(true).WithEncoder(Console).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEscapeQuote(true).WithEncoder(Console).Build()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info(`"this is a message"`)
@@ -221,7 +238,7 @@ func BenchmarkConsoleLoggerWithEscapeQuote(b *testing.B) {
 
 func BenchmarkJsonLoggerWithEscapeQuote(b *testing.B) {
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEscapeQuote(true).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEscapeQuote(true).WithEncoder(Json).Build()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info(`"this is a message"`)
@@ -230,7 +247,7 @@ func BenchmarkJsonLoggerWithEscapeQuote(b *testing.B) {
 
 func BenchmarkConsoleLoggerWithSimpleField(b *testing.B) {
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Console).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Console).Build()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info("this is a message", Int("key", 100))
@@ -239,7 +256,7 @@ func BenchmarkConsoleLoggerWithSimpleField(b *testing.B) {
 
 func BenchmarkJsonLoggerWithSimpleField(b *testing.B) {
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Json).Build()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info("this is a message", Int("key", 100))
@@ -248,7 +265,7 @@ func BenchmarkJsonLoggerWithSimpleField(b *testing.B) {
 
 func BenchmarkConsoleLoggerWithField(b *testing.B) {
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Console).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Console).Build()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info("this is a message", String("key", "value"), Int("int", 10000))
@@ -257,7 +274,31 @@ func BenchmarkConsoleLoggerWithField(b *testing.B) {
 
 func BenchmarkJsonLoggerWithField(b *testing.B) {
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEncoder(Json).Build()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Info("this is a message", String("key", "value"), Int("int", 10000))
+	}
+}
+
+func BenchmarkConsoleLoggerWithPrefixField(b *testing.B) {
+	logger := NewLogContext().
+		WithLevelKey(true, LevelOption{}).
+		WithCallerKey(true, CallerOption{}).
+		WithTimeKey(true, TimeOption{}).
+		WithWriter(AddSync(nullWriter{})).WithEncoder(Console).Build()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Info("this is a message", String("key", "value"), Int("int", 10000))
+	}
+}
+
+func BenchmarkJsonLoggerWithPrefixField(b *testing.B) {
+	logger := NewLogContext().
+		WithLevelKey(true, LevelOption{}).
+		WithCallerKey(true, CallerOption{}).
+		WithTimeKey(true, TimeOption{}).
+		WithWriter(AddSync(nullWriter{})).WithEncoder(Json).Build()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info("this is a message", String("key", "value"), Int("int", 10000))
@@ -267,7 +308,7 @@ func BenchmarkJsonLoggerWithField(b *testing.B) {
 func BenchmarkJsonLoggerWithReflectValueField(b *testing.B) {
 	type Int int
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithReflectValue(true).WithWriter(AddSync(nullWriter{})).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithReflectValue(true).WithWriter(AddSync(nullWriter{})).WithEncoder(Json).Build()
 	arr := []Int{10, 20, 30}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -277,7 +318,7 @@ func BenchmarkJsonLoggerWithReflectValueField(b *testing.B) {
 
 func BenchmarkConsoleLoggerWithEscapeQuoteWithField(b *testing.B) {
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEscapeQuote(true).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEscapeQuote(true).WithEncoder(Json).Build()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info(`"this is a message"`, String(`"key"`, `"value"`))
@@ -286,7 +327,7 @@ func BenchmarkConsoleLoggerWithEscapeQuoteWithField(b *testing.B) {
 
 func BenchmarkJsonLoggerWithEscapeQuoteWithField(b *testing.B) {
 	// disable level/time/caller attributes
-	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEscapeQuote(true).WithEncoder(Json).BuildConsoleLogger(LevelTrace)
+	logger := NewLogContext().WithWriter(AddSync(nullWriter{})).WithEscapeQuote(true).WithEncoder(Json).Build()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info(`"this is a message"`, String(`"key"`, `"value"`))

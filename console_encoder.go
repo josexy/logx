@@ -18,13 +18,18 @@ func (enc *ConsoleEncoder) Init() {
 	}
 }
 
-func (enc *ConsoleEncoder) Encode(buf *Buffer, msg string, fields []Field) error {
+func (enc *ConsoleEncoder) Encode(ent entry, fields []Field) (ret *Buffer, err error) {
+	jsonEnc := enc.jsonEncoder.clone()
+	defer putJsonEncoder(jsonEnc)
+
+	buf := jsonEnc.buf
+
 	if enc.timeF.enable {
-		buf.WriteString(enc.timeF.String())
+		buf.WriteString(enc.timeF.String(&ent))
 		buf.WriteByte(ConsoleEncoderSplitCharacter)
 	}
 	if enc.levelF.enable {
-		buf.WriteString(enc.levelF.String())
+		buf.WriteString(enc.levelF.String(&ent))
 		buf.WriteByte(ConsoleEncoderSplitCharacter)
 	}
 	if enc.callerF.enable {
@@ -32,33 +37,35 @@ func (enc *ConsoleEncoder) Encode(buf *Buffer, msg string, fields []Field) error
 		buf.WriteByte(ConsoleEncoderSplitCharacter)
 	}
 
-	buf.WriteString(msg)
+	buf.WriteString(ent.message)
 
 	n1 := len(fields)
 	n2 := len(enc.preFields)
 	if n1 == 0 && n2 == 0 {
-		return nil
+		return buf, nil
 	}
 	buf.WriteByte(ConsoleEncoderSplitCharacter)
 
-	enc.jsonEncoder.buf = buf
-	enc.jsonEncoder.writeBeginObject()
-	enc.jsonEncoder.writePrefixFields()
+	jsonEnc.writeBeginObject()
+	jsonEnc.writePrefixFields()
 	if n1 == 0 {
-		enc.jsonEncoder.writeEndObject()
-		return nil
+		jsonEnc.writeEndObject()
+		ret = buf
+		return
 	}
 	if n2 > 0 {
-		enc.jsonEncoder.writeSplitComma()
+		jsonEnc.writeSplitComma()
 	}
 	for i := 0; i < n1; i++ {
-		if err := enc.jsonEncoder.writeField(&fields[i]); err != nil {
-			return err
+		if err = jsonEnc.writeField(&fields[i]); err != nil {
+			bufPool.Put(buf)
+			return
 		}
 		if i+1 != n1 {
-			enc.jsonEncoder.writeSplitComma()
+			jsonEnc.writeSplitComma()
 		}
 	}
-	enc.jsonEncoder.writeEndObject()
-	return nil
+	jsonEnc.writeEndObject()
+	ret = buf
+	return
 }
