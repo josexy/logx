@@ -37,6 +37,10 @@ func loggerInfo(lc *logx.LogContext, msg string) {
 				"version": "v1",
 				"env":     "dev",
 			},
+			"kvs2": map[string][]string{
+				"version": {"v1", "v2"},
+				"env":     {"dev", "prod"},
+			},
 		},
 		"kvs": map[string]string{
 			"version": "v1",
