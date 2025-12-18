@@ -184,7 +184,7 @@ func (l *LoggerX) output(level LevelType, msg string, fields []Field) {
 		return
 	}
 	if buf.Len() > 0 && buf.Bytes()[buf.Len()-1] != '\n' {
-		buf.WriteByte('\n')
+		buf.AppendByte('\n')
 	}
 	l.logCtx.writer.Write(buf.Bytes())
 	bufPool.Put(buf)

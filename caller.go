@@ -41,24 +41,28 @@ type callerField struct {
 	option    CallerOption
 }
 
-func (c *callerField) formatJson(enc *JsonEncoder) {
+func (c *callerField) appendWithJson(enc *JsonEncoder) {
 	fileName, funcName := c.value()
-	fields := make([]Field, 0, 2)
+	fields := [2]Field{}
+	var n int
 	if len(fileName) > 0 {
-		fields = append(fields, String(c.option.FileKey, fileName))
+		fields[0] = String(c.option.FileKey, fileName)
+		n++
 	}
 	if len(funcName) > 0 {
-		fields = append(fields, String(c.option.FuncKey, funcName))
+		if n == 0 {
+			fields[0] = String(c.option.FuncKey, funcName)
+		} else {
+			fields[1] = String(c.option.FuncKey, funcName)
+		}
+		n++
 	}
 	enc.writeFieldKey(c.option.CallerKey)
 	enc.writeSplitColon()
-	enc.writeFieldObject(fields)
+	enc.writeFieldObject(fields[:n])
 }
 
 func (c *callerField) value() (fileName, funcName string) {
-	if !c.enable {
-		return
-	}
 	pc, file, line, ok := runtime.Caller(c.skipDepth)
 	if !ok {
 		return
@@ -81,10 +85,11 @@ func (c *callerField) value() (fileName, funcName string) {
 	return
 }
 
-func (c *callerField) String() string {
+func (c *callerField) append(buf *Buffer) {
 	fileName, _ := c.value()
 	if c.color {
-		fileName = Yellow(fileName)
+		appendColor(buf, YellowAttr, fileName)
+		return
 	}
-	return fileName
+	buf.AppendString(fileName)
 }

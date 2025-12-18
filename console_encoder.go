@@ -25,26 +25,26 @@ func (enc *ConsoleEncoder) Encode(ent entry, fields []Field) (ret *Buffer, err e
 	buf := jsonEnc.buf
 
 	if enc.timeF.enable {
-		buf.WriteString(enc.timeF.String(&ent))
-		buf.WriteByte(ConsoleEncoderSplitCharacter)
+		enc.timeF.append(buf, &ent)
+		buf.AppendByte(ConsoleEncoderSplitCharacter)
 	}
 	if enc.levelF.enable {
-		buf.WriteString(enc.levelF.String(&ent))
-		buf.WriteByte(ConsoleEncoderSplitCharacter)
+		enc.levelF.append(buf, &ent)
+		buf.AppendByte(ConsoleEncoderSplitCharacter)
 	}
 	if enc.callerF.enable {
-		buf.WriteString(enc.callerF.String())
-		buf.WriteByte(ConsoleEncoderSplitCharacter)
+		enc.callerF.append(buf)
+		buf.AppendByte(ConsoleEncoderSplitCharacter)
 	}
 
-	buf.WriteString(ent.message)
+	buf.AppendString(ent.message)
 
 	n1 := len(fields)
 	n2 := len(enc.preFields)
 	if n1 == 0 && n2 == 0 {
 		return buf, nil
 	}
-	buf.WriteByte(ConsoleEncoderSplitCharacter)
+	buf.AppendByte(ConsoleEncoderSplitCharacter)
 
 	jsonEnc.writeBeginObject()
 	jsonEnc.writePrefixFields()

@@ -31,14 +31,14 @@ var (
 		LevelFatal: "FATAL",
 		LevelPanic: "PANIC",
 	}
-	levelTypeColorMap = map[LevelType]func(string) string{
-		LevelTrace: Magenta,
-		LevelDebug: HiCyan,
-		LevelInfo:  Green,
-		LevelWarn:  Yellow,
-		LevelError: Red,
-		LevelFatal: HiRed,
-		LevelPanic: HiYellow,
+	levelTypeColorMap = map[LevelType]ColorAttr{
+		LevelTrace: MagentaAttr,
+		LevelDebug: HiCyanAttr,
+		LevelInfo:  GreenAttr,
+		LevelWarn:  YellowAttr,
+		LevelError: RedAttr,
+		LevelFatal: HiRedAttr,
+		LevelPanic: HiYellowAttr,
 	}
 )
 
@@ -55,23 +55,24 @@ type levelField struct {
 	option LevelOption
 }
 
-func (lvl *levelField) formatJson(enc *JsonEncoder, ent *entry) {
+func (lvl *levelField) appendWithJson(enc *JsonEncoder, ent *entry) {
 	enc.writeFieldKey(lvl.option.LevelKey)
 	enc.writeSplitColon()
-	enc.writeFieldStringPrimitive(lvl.String(ent))
+	enc.writeQuote()
+	lvl.append(enc.buf, ent)
+	enc.writeQuote()
 }
 
-func (lvl *levelField) String(ent *entry) (out string) {
-	if !lvl.enable {
+func (lvl *levelField) append(buf *Buffer, ent *entry) {
+	var level string
+	if lvl.option.LowerKey {
+		level = levelTypeLowerMap[ent.level]
+	} else {
+		level = levelTypeUpperMap[ent.level]
+	}
+	if lvl.color {
+		appendColor(buf, levelTypeColorMap[ent.level], level)
 		return
 	}
-	if lvl.option.LowerKey {
-		out = levelTypeLowerMap[ent.level]
-	} else {
-		out = levelTypeUpperMap[ent.level]
-	}
-	if lvl.color && len(out) > 0 {
-		out = levelTypeColorMap[ent.level](out)
-	}
-	return
+	buf.AppendString(level)
 }

@@ -43,11 +43,11 @@ type (
 	FieldType byte
 
 	Field struct {
-		Type        FieldType
 		Key         string
-		IntValue    int64
 		StringValue string
 		AnyValue    any
+		IntValue    int64
+		Type        FieldType
 	}
 )
 

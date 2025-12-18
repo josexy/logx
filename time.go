@@ -1,16 +1,12 @@
 package logx
 
-import (
-	"fmt"
-	"strconv"
-	"time"
-)
-
 type TimeOption struct {
 	// time key, default: time
 	TimeKey string
-	// time formatter, return value: string, int64, time.Time, any
-	Formatter func(t time.Time) any
+	// convert time to int64 timestamp seconds, default: false
+	Timestamp bool
+	// time layout, default: time.DateTime
+	Layout string
 }
 
 type timeField struct {
@@ -19,48 +15,35 @@ type timeField struct {
 	option TimeOption
 }
 
-func (t *timeField) formatJson(enc *JsonEncoder, ent *entry) {
+func (t *timeField) appendWithJson(enc *JsonEncoder, ent *entry) {
 	enc.writeFieldKey(t.option.TimeKey)
 	enc.writeSplitColon()
 
-	switch val := t.value(ent); val.(type) {
-	case string:
-		enc.writeFieldString(val.(string))
-	case int64:
-		enc.writeFieldInt64(val.(int64))
-	default:
-		if ts, ok := val.(time.Time); ok {
-			enc.writeFieldTime(ts)
-		} else {
-			enc.writeFieldString(fmt.Sprintf("%v", val))
-		}
+	if !t.option.Timestamp {
+		enc.writeQuote()
+	}
+	t.value(enc.buf, ent)
+	if !t.option.Timestamp {
+		enc.writeQuote()
 	}
 }
 
-func (t *timeField) value(ent *entry) (out any) {
-	if !t.enable {
+func (t *timeField) value(buf *Buffer, ent *entry) {
+	if t.color {
+		if t.option.Timestamp {
+			appendColorWithFunc(buf, RedAttr, func() { buf.AppendInt(ent.time.Unix()) })
+		} else {
+			appendColorWithFunc(buf, BlueAttr, func() { buf.AppendTime(ent.time, t.option.Layout) })
+		}
 		return
 	}
-	out = t.option.Formatter(ent.time)
-	return
+	if t.option.Timestamp {
+		buf.AppendInt(ent.time.Unix())
+		return
+	}
+	buf.AppendTime(ent.time, t.option.Layout)
 }
 
-func (t *timeField) String(ent *entry) string {
-	var out string
-	switch val := t.value(ent); val.(type) {
-	case string:
-		out = val.(string)
-	case int64:
-		out = strconv.FormatInt(val.(int64), 10)
-	default:
-		if ts, ok := val.(time.Time); ok {
-			out = ts.Format(time.DateTime)
-		} else {
-			out = fmt.Sprintf("%v", val)
-		}
-	}
-	if t.color && len(out) > 0 {
-		out = Blue(out)
-	}
-	return out
+func (t *timeField) append(buf *Buffer, ent *entry) {
+	t.value(buf, ent)
 }

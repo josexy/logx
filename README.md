@@ -38,7 +38,7 @@ func main() {
 		WithColorfulset(true, logx.TextColorAttri{}).                                                           // Enable colored output
 		WithLevelKey(true, logx.LevelOption{}).                                                                 // Show log level
 		WithCallerKey(true, logx.CallerOption{}).                                                               // Show caller information
-		WithWriter(logx.AddSync(color.Output)).                                                                 // Set output writer
+		WithWriter(logx.AddSync(logx.Output)).                                                                 // Set output writer
 		WithEncoder(logx.Console).                                                                              // Use console encoder
 		WithTimeKey(true, logx.TimeOption{Formatter: func(t time.Time) any { return t.Format(time.DateTime) }}) // Customize time format
 

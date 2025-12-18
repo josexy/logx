@@ -54,6 +54,9 @@ func (lc *LogContext) WithNewFields(fields ...Field) *LogContext {
 }
 
 func (lc *LogContext) WithColorfulset(enable bool, attr TextColorAttri) *LogContext {
+	if NoColor {
+		enable = false
+	}
 	lc.levelF.color = enable
 	lc.timeF.color = enable
 	lc.callerF.color = enable
@@ -89,8 +92,8 @@ func (lc *LogContext) WithTimeKey(enable bool, option TimeOption) *LogContext {
 		if len(option.TimeKey) == 0 {
 			option.TimeKey = "time"
 		}
-		if option.Formatter == nil {
-			option.Formatter = func(t time.Time) any { return t.Format(time.RFC3339) }
+		if len(option.Layout) == 0 {
+			option.Layout = time.DateTime
 		}
 		lc.timeF.option = option
 	}

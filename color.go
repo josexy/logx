@@ -1,38 +1,71 @@
 package logx
 
-import "github.com/fatih/color"
+import (
+	"os"
 
-type ColorAttr = uint8
+	"github.com/mattn/go-colorable"
+	"github.com/mattn/go-isatty"
+)
+
+type ColorAttr uint8
 
 const (
-	GreenAttr ColorAttr = iota
+	format   = "\x1b["
+	unformat = "\x1b[0m"
+	bold     = 1
+)
+
+const (
+	BlackAttr ColorAttr = iota + 30
+	RedAttr
+	GreenAttr
 	YellowAttr
 	BlueAttr
-	RedAttr
-	CyanAttr
 	MagentaAttr
+	CyanAttr
 	WhiteAttr
+)
+
+const (
+	HiBlackAttr ColorAttr = iota + 90
+	HiRedAttr
 	HiGreenAttr
 	HiYellowAttr
 	HiBlueAttr
-	HiRedAttr
-	HiCyanAttr
 	HiMagentaAttr
+	HiCyanAttr
 	HiWhiteAttr
 )
 
-type colorAttri struct {
-	keyColor    *color.Color
-	stringColor *color.Color
-	boolColor   *color.Color
-	floatColor  *color.Color
-	numberColor *color.Color
+var (
+	NoColor = os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" ||
+		(!isatty.IsTerminal(os.Stdout.Fd()) && !isatty.IsCygwinTerminal(os.Stdout.Fd()))
+
+	Output = colorable.NewColorableStdout()
+)
+
+type TextColorAttri struct {
+	KeyColor     ColorAttr
+	StringColor  ColorAttr
+	BooleanColor ColorAttr
+	FloatColor   ColorAttr
+	NumberColor  ColorAttr
+}
+
+func (c ColorAttr) appendTo(buf *Buffer) {
+	if c <= 0 {
+		return
+	}
+	buf.AppendInt(int64(c))
+	if c >= HiBlackAttr && c <= HiWhiteAttr {
+		buf.AppendByte(';')
+		buf.AppendInt(int64(bold))
+	}
 }
 
 type colorfulset struct {
 	enable bool
 	attr   TextColorAttri
-	colorAttri
 }
 
 func (c *colorfulset) init() {
@@ -54,92 +87,20 @@ func (c *colorfulset) init() {
 	if c.attr.NumberColor == 0 || c.attr.NumberColor > HiWhiteAttr {
 		c.attr.NumberColor = RedAttr
 	}
-	c.keyColor = colorMap[c.attr.KeyColor]
-	c.stringColor = colorMap[c.attr.StringColor]
-	c.boolColor = colorMap[c.attr.BooleanColor]
-	c.floatColor = colorMap[c.attr.FloatColor]
-	c.numberColor = colorMap[c.attr.NumberColor]
 }
 
-type TextColorAttri struct {
-	KeyColor     ColorAttr
-	StringColor  ColorAttr
-	BooleanColor ColorAttr
-	FloatColor   ColorAttr
-	NumberColor  ColorAttr
+func appendColor(buf *Buffer, color ColorAttr, s string) {
+	buf.AppendString(format)
+	color.appendTo(buf)
+	buf.AppendByte('m')
+	buf.AppendString(s)
+	buf.AppendString(unformat)
 }
 
-var (
-	colorMap = map[uint8]*color.Color{
-		GreenAttr:     color.New(color.FgGreen),
-		YellowAttr:    color.New(color.FgYellow),
-		BlueAttr:      color.New(color.FgBlue),
-		RedAttr:       color.New(color.FgRed),
-		CyanAttr:      color.New(color.FgCyan),
-		MagentaAttr:   color.New(color.FgMagenta),
-		WhiteAttr:     color.New(color.FgWhite),
-		HiGreenAttr:   color.New(color.FgHiGreen, color.Bold),
-		HiYellowAttr:  color.New(color.FgHiYellow, color.Bold),
-		HiBlueAttr:    color.New(color.FgHiBlue, color.Bold),
-		HiRedAttr:     color.New(color.FgHiRed, color.Bold),
-		HiCyanAttr:    color.New(color.FgHiCyan, color.Bold),
-		HiMagentaAttr: color.New(color.FgHiMagenta, color.Bold),
-		HiWhiteAttr:   color.New(color.FgHiWhite, color.Bold),
-	}
-)
-
-func Green(msg string) string {
-	return colorMap[GreenAttr].Sprint(msg)
-}
-
-func Yellow(msg string) string {
-	return colorMap[YellowAttr].Sprint(msg)
-}
-
-func Blue(msg string) string {
-	return colorMap[BlueAttr].Sprint(msg)
-}
-
-func Red(msg string) string {
-	return colorMap[RedAttr].Sprint(msg)
-}
-
-func Cyan(msg string) string {
-	return colorMap[CyanAttr].Sprint(msg)
-}
-
-func Magenta(msg string) string {
-	return colorMap[MagentaAttr].Sprint(msg)
-}
-
-func White(msg string) string {
-	return colorMap[WhiteAttr].Sprint(msg)
-}
-
-func HiGreen(msg string) string {
-	return colorMap[HiGreenAttr].Sprint(msg)
-}
-
-func HiYellow(msg string) string {
-	return colorMap[HiYellowAttr].Sprint(msg)
-}
-
-func HiBlue(msg string) string {
-	return colorMap[HiBlueAttr].Sprint(msg)
-}
-
-func HiRed(msg string) string {
-	return colorMap[HiRedAttr].Sprint(msg)
-}
-
-func HiCyan(msg string) string {
-	return colorMap[HiCyanAttr].Sprint(msg)
-}
-
-func HiMagenta(msg string) string {
-	return colorMap[HiMagentaAttr].Sprint(msg)
-}
-
-func HiWhite(msg string) string {
-	return colorMap[HiWhiteAttr].Sprint(msg)
+func appendColorWithFunc(buf *Buffer, color ColorAttr, append func()) {
+	buf.AppendString(format)
+	color.appendTo(buf)
+	buf.AppendByte('m')
+	append()
+	buf.AppendString(unformat)
 }

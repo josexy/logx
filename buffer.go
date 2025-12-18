@@ -59,7 +59,7 @@ func (b *Buffer) AppendFloat(f float64, bitSize int) {
 }
 
 func (b *Buffer) AppendQuote(s string) {
-	b.bs = strconv.AppendQuote(b.bs, s)
+	b.bs = appendQuotedWith(b.bs, s)
 }
 
 func (b *Buffer) TryGrow(size int) { b.bs = slices.Grow(b.bs, size) }

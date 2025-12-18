@@ -3,6 +3,7 @@ package logx
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,9 +13,25 @@ import (
 	"runtime"
 	"testing"
 	"time"
-
-	"github.com/fatih/color"
 )
+
+func TestStringQuote(t *testing.T) {
+	buf := NewBuffer(make([]byte, 0, 8))
+	buf.AppendString("test-")
+	appendQuoteString(buf, "hello world")
+	buf.AppendInt(100)
+	if buf.String() != `test-hello world100` {
+		t.Errorf("expect %s, got %s", "test-hello world", buf.String())
+	}
+
+	buf.Reset()
+	buf.AppendString("test2-")
+	appendQuoteString(buf, `"hello+"hahaha"+world"`)
+	buf.AppendInt(100)
+	if buf.String() != `test2-\"hello+\"hahaha\"+world\"100` {
+		t.Errorf("expect %s, got %s", `test2-\"hello+\"hahaha\"+world\"100`, buf.String())
+	}
+}
 
 func TestConsoleLogger(t *testing.T) {
 	logCtx := NewLogContext().
@@ -23,7 +40,7 @@ func TestConsoleLogger(t *testing.T) {
 		WithLevelKey(true, LevelOption{}).
 		WithCallerKey(true, CallerOption{}).
 		WithTimeKey(true, TimeOption{}).
-		WithWriter(AddSync(color.Output)).
+		WithWriter(AddSync(Output)).
 		WithFields(String("arch", runtime.GOARCH), Bool("bool", true)).
 		WithEncoder(Console)
 
@@ -69,13 +86,12 @@ func TestConsoleLogger(t *testing.T) {
 func TestJsonLogger(t *testing.T) {
 	buffer := bytes.NewBuffer(nil)
 	logger := NewLogContext().
-		WithColorfulset(true, TextColorAttri{}).
 		WithFields(String("os", runtime.GOOS), String("arch", runtime.GOARCH)).
 		WithLevel(LevelTrace).
 		WithLevelKey(true, LevelOption{}).
 		WithCallerKey(true, CallerOption{Formatter: FullFileFunc}).
-		WithWriter(AddSync(io.MultiWriter(buffer, color.Output))).
-		WithTimeKey(true, TimeOption{Formatter: func(t time.Time) any { return t.Format(time.DateTime) }}).
+		WithWriter(AddSync(io.MultiWriter(buffer, Output))).
+		WithTimeKey(true, TimeOption{}).
 		WithEncoder(Json).
 		WithEscapeQuote(true).
 		WithReflectValue(true).
@@ -284,7 +300,6 @@ func BenchmarkJsonLoggerWithField(b *testing.B) {
 func BenchmarkConsoleLoggerWithPrefixField(b *testing.B) {
 	logger := NewLogContext().
 		WithLevelKey(true, LevelOption{}).
-		WithCallerKey(true, CallerOption{}).
 		WithTimeKey(true, TimeOption{}).
 		WithWriter(AddSync(nullWriter{})).WithEncoder(Console).Build()
 	b.ResetTimer()
@@ -296,12 +311,45 @@ func BenchmarkConsoleLoggerWithPrefixField(b *testing.B) {
 func BenchmarkJsonLoggerWithPrefixField(b *testing.B) {
 	logger := NewLogContext().
 		WithLevelKey(true, LevelOption{}).
-		WithCallerKey(true, CallerOption{}).
 		WithTimeKey(true, TimeOption{}).
 		WithWriter(AddSync(nullWriter{})).WithEncoder(Json).Build()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Info("this is a message", String("key", "value"), Int("int", 10000))
+	}
+}
+
+func BenchmarkColorConsoleLoggerWithPrefixField(b *testing.B) {
+	logger := NewLogContext().
+		WithColorfulset(true, TextColorAttri{}).
+		WithLevelKey(true, LevelOption{}).
+		WithTimeKey(true, TimeOption{}).
+		WithWriter(AddSync(nullWriter{})).WithEncoder(Console).Build()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Info("this is a message", String("key", "value"), Int("int", 10000))
+	}
+}
+
+func BenchmarkColorJsonLoggerWithPrefixField(b *testing.B) {
+	logger := NewLogContext().
+		WithColorfulset(true, TextColorAttri{}).
+		WithLevelKey(true, LevelOption{}).
+		WithTimeKey(true, TimeOption{}).
+		WithWriter(AddSync(nullWriter{})).WithEncoder(Json).Build()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Info("this is a message", String("key", "value"), Int("int", 10000))
+	}
+}
+
+func BenchmarkSlogJsonLoggerWithPrefixField(b *testing.B) {
+	logger := slog.New(slog.NewJSONHandler(nullWriter{}, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.LogAttrs(context.Background(), slog.LevelInfo, "this is a message", slog.String("key", "value"), slog.Int("int", 10000))
 	}
 }
 
