@@ -40,7 +40,7 @@ func main() {
 		WithCallerKey(true, logx.CallerOption{}).                                                               // Show caller information
 		WithWriter(logx.AddSync(logx.Output)).                                                                 // Set output writer
 		WithEncoder(logx.Console).                                                                              // Use console encoder
-		WithTimeKey(true, logx.TimeOption{Formatter: func(t time.Time) any { return t.Format(time.DateTime) }}) // Customize time format
+		WithTimeKey(true, logx.TimeOption{}) // Customize time format
 
 	logger := logCtx.Build()
 
