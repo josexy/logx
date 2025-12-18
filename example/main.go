@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/josexy/logx"
 	"github.com/josexy/logx/example/sub"
 )
@@ -23,24 +22,26 @@ func main() {
 		WithLevel(logx.LevelTrace).
 		WithLevelKey(true, logx.LevelOption{}).
 		WithCallerKey(true, logx.CallerOption{Formatter: logx.FullFile}).
-		WithWriter(logx.Lock(logx.AddSync(color.Output))).
+		WithWriter(logx.Lock(logx.AddSync(logx.Output))).
 		// WithWriter(logx.AddSync(nil)).
 		WithEncoder(logx.Console).
 		WithEscapeQuote(true).
-		WithTimeKey(true, logx.TimeOption{Formatter: func(t time.Time) any { return t.Format(time.DateTime) }})
+		WithTimeKey(true, logx.TimeOption{Timestamp: true})
 
 	loggerSimple := logCtx.Build()
-	loggerSimple.Trace("this is a trace message", logx.String("key", "value"), logx.Int("key", 2222))
+	loggerSimple.Trace("this is a trace message", logx.String("key", `"value"`), logx.Int("key", 2222))
 	loggerSimple.Debug("this is a debug message")
 	loggerSimple.Info("this is an info message")
 	loggerSimple.Warn("this is a warning message")
 	loggerSimple.Error("this is an error message")
+	loggerSimple.Error(`"this" "is" an error" "message`)
 	loggerSimple.Error("")
 	loggerSimple.Error("", logx.String("key", "value"))
 	loggerSimple.With(logx.String("key", "value")).Error("")
 
 	logCtx = logCtx.Copy().
 		WithEncoder(logx.Json).
+		WithTimeKey(true, logx.TimeOption{Layout: time.Kitchen}).
 		WithCallerKey(true, logx.CallerOption{Formatter: logx.ShortFileFunc}).
 		WithEscapeQuote(true)
 
@@ -53,7 +54,7 @@ func main() {
 
 	loggerJson := logCtx.WithEncoder(logx.Json).
 		WithReflectValue(true).
-		WithWriter(logx.AddSync(io.MultiWriter(color.Output))).
+		WithWriter(logx.AddSync(io.MultiWriter(logx.Output))).
 		WithFields(logx.String("os", runtime.GOOS), logx.String("arch", runtime.GOARCH)).
 		Build()
 
@@ -62,7 +63,7 @@ func main() {
 	loggerJson.Info("this is an info message")
 	loggerJson.Warn("this is a warning message")
 	loggerJson.Error("this is an error message")
-	loggerJson.Info("this is a info message",
+	loggerJson.Info(`"this is a "info" message"`,
 		logx.String("string", "string"),
 		logx.Bool("bool", false),
 		logx.Bool("bool2", true),
@@ -165,11 +166,7 @@ func goroutinesPrintLogs() {
 
 	lc := logx.NewLogContext().
 		WithLevelKey(true, logx.LevelOption{}).
-		WithTimeKey(true, logx.TimeOption{
-			Formatter: func(t time.Time) any {
-				return t.Format("2006/01/02 15:04:05.000")
-			},
-		}).
+		WithTimeKey(true, logx.TimeOption{}).
 		WithCallerKey(true, logx.CallerOption{}).
 		WithLevel(logx.LevelInfo).
 		WithWriter(logx.AddSync(file)).

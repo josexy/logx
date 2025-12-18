@@ -5,7 +5,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/josexy/logx"
 )
 
@@ -59,7 +58,7 @@ func TestLogger() {
 		WithLevel(logx.LevelTrace).
 		WithLevelKey(true, logx.LevelOption{LowerKey: true}).
 		WithCallerKey(true, logx.CallerOption{Formatter: logx.FullFile}).
-		WithWriter(logx.Lock(logx.AddSync(color.Output))).
+		WithWriter(logx.Lock(logx.AddSync(logx.Output))).
 		// WithWriter(logx.AddSync(nil)).
 		WithEncoder(logx.Console).
 		WithTimeKey(true, logx.TimeOption{})
