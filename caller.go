@@ -35,13 +35,13 @@ type CallerOption struct {
 }
 
 type callerField struct {
-	enable    bool
-	skipDepth int
-	color     bool
 	option    CallerOption
+	skipDepth int
+	enable    bool
+	color     bool
 }
 
-func (c *callerField) appendWithJson(enc *JsonEncoder) {
+func (c *callerField) AppendField(enc *JsonEncoder) {
 	fileName, funcName := c.value()
 	fields := [2]Field{}
 	var n int
@@ -85,7 +85,7 @@ func (c *callerField) value() (fileName, funcName string) {
 	return
 }
 
-func (c *callerField) append(buf *Buffer) {
+func (c *callerField) AppendPrimitive(buf *Buffer) {
 	fileName, _ := c.value()
 	if c.color {
 		appendColor(buf, YellowAttr, fileName)

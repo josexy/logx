@@ -25,15 +25,15 @@ func (enc *ConsoleEncoder) Encode(ent entry, fields []Field) (ret *Buffer, err e
 	buf := jsonEnc.buf
 
 	if enc.timeF.enable {
-		enc.timeF.append(buf, &ent)
+		enc.timeF.AppendTimePrimitive(buf, ent.time)
 		buf.AppendByte(ConsoleEncoderSplitCharacter)
 	}
 	if enc.levelF.enable {
-		enc.levelF.append(buf, &ent)
+		enc.levelF.AppendPrimitive(buf, ent.level)
 		buf.AppendByte(ConsoleEncoderSplitCharacter)
 	}
 	if enc.callerF.enable {
-		enc.callerF.append(buf)
+		enc.callerF.AppendPrimitive(buf)
 		buf.AppendByte(ConsoleEncoderSplitCharacter)
 	}
 

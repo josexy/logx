@@ -50,29 +50,29 @@ type LevelOption struct {
 }
 
 type levelField struct {
+	option LevelOption
 	enable bool
 	color  bool
-	option LevelOption
 }
 
-func (lvl *levelField) appendWithJson(enc *JsonEncoder, ent *entry) {
+func (lvl *levelField) AppendField(enc *JsonEncoder, level LevelType) {
 	enc.writeFieldKey(lvl.option.LevelKey)
 	enc.writeSplitColon()
 	enc.writeQuote()
-	lvl.append(enc.buf, ent)
+	lvl.AppendPrimitive(enc.buf, level)
 	enc.writeQuote()
 }
 
-func (lvl *levelField) append(buf *Buffer, ent *entry) {
-	var level string
+func (lvl *levelField) AppendPrimitive(buf *Buffer, level LevelType) {
+	var levelStr string
 	if lvl.option.LowerKey {
-		level = levelTypeLowerMap[ent.level]
+		levelStr = levelTypeLowerMap[level]
 	} else {
-		level = levelTypeUpperMap[ent.level]
+		levelStr = levelTypeUpperMap[level]
 	}
 	if lvl.color {
-		appendColor(buf, levelTypeColorMap[ent.level], level)
+		appendColor(buf, levelTypeColorMap[level], levelStr)
 		return
 	}
-	buf.AppendString(level)
+	buf.AppendString(levelStr)
 }

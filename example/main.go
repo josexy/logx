@@ -18,7 +18,9 @@ import (
 
 func main() {
 	logCtx := logx.NewLogContext().
-		WithColorfulset(true, logx.TextColorAttri{}).
+		WithColorfulset(true, logx.TextColorAttri{
+			NumberColor: logx.CyanAttr,
+		}).
 		WithLevel(logx.LevelTrace).
 		WithLevelKey(true, logx.LevelOption{}).
 		WithCallerKey(true, logx.CallerOption{Formatter: logx.FullFile}).
@@ -36,7 +38,7 @@ func main() {
 	loggerSimple.Error("this is an error message")
 	loggerSimple.Error(`"this" "is" an error" "message`)
 	loggerSimple.Error("")
-	loggerSimple.Error("", logx.String("key", "value"))
+	loggerSimple.Error("", logx.String("key", "value"), logx.Time("now", time.Now()))
 	loggerSimple.With(logx.String("key", "value")).Error("")
 
 	logCtx = logCtx.Copy().
@@ -80,6 +82,7 @@ func main() {
 		logx.Float32("float32", 1234.45),
 		logx.Float64("float64", 1234.4567),
 		logx.Time("ts", time.Now().Add(time.Duration(time.Hour))),
+		logx.Time("time_1", time.Now()),
 		logx.Duration("duration", time.Duration(time.Hour+30*time.Minute+40*time.Second)),
 		logx.Error("err", errors.New("error message")),
 		logx.Error("err2", nil),

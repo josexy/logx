@@ -21,6 +21,8 @@ func (enc *JsonEncoder) Init() {
 		enc.callerF.skipDepth += enc.callerF.option.CallerSkip
 	}
 	enc.colors.init()
+	enc.timeF.numberColor = enc.colors.attr.NumberColor
+	enc.timeF.stringColor = enc.colors.attr.StringColor
 }
 
 func (enc *JsonEncoder) clone() *JsonEncoder {
@@ -80,15 +82,15 @@ func (enc *JsonEncoder) writeEndArray() { enc.buf.AppendByte(']') }
 
 func (enc *JsonEncoder) writePromptFields(ent *entry) {
 	if enc.levelF.enable {
-		enc.levelF.appendWithJson(enc, ent)
+		enc.levelF.AppendField(enc, ent.level)
 		enc.writeSplitComma()
 	}
 	if enc.timeF.enable {
-		enc.timeF.appendWithJson(enc, ent)
+		enc.timeF.AppendField(enc, ent.time)
 		enc.writeSplitComma()
 	}
 	if enc.callerF.enable {
-		enc.callerF.appendWithJson(enc)
+		enc.callerF.AppendField(enc)
 		enc.writeSplitComma()
 	}
 }
@@ -276,7 +278,7 @@ func (enc *JsonEncoder) writeFieldFloat64(value float64) {
 }
 
 func (enc *JsonEncoder) writeFieldTime(value time.Time) {
-	enc.writeFieldString(value.Format(time.DateTime))
+	enc.timeF.AppendTime(enc, value)
 }
 
 func (enc *JsonEncoder) writeFieldDuration(value time.Duration) {
