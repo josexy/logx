@@ -97,10 +97,10 @@ func appendColor(buf *Buffer, color ColorAttr, s string) {
 	buf.AppendString(unformat)
 }
 
-func appendColorWithFunc(buf *Buffer, color ColorAttr, append func()) {
+func appendColorWithFunc(buf *Buffer, color ColorAttr, append func(*Buffer)) {
 	buf.AppendString(format)
 	color.appendTo(buf)
 	buf.AppendByte('m')
-	append()
+	append(buf)
 	buf.AppendString(unformat)
 }

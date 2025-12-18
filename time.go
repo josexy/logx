@@ -38,9 +38,9 @@ func (t *timeField) AppendTime(enc *JsonEncoder, ti time.Time) {
 func (t *timeField) AppendTimePrimitive(buf *Buffer, ti time.Time) {
 	if t.color {
 		if t.option.Timestamp {
-			appendColorWithFunc(buf, t.numberColor, func() { buf.AppendInt(ti.UnixNano()) })
+			appendColorWithFunc(buf, t.numberColor, func(buf *Buffer) { buf.AppendInt(ti.UnixNano()) })
 		} else {
-			appendColorWithFunc(buf, t.stringColor, func() { buf.AppendTime(ti, t.option.Layout) })
+			appendColorWithFunc(buf, t.stringColor, func(buf *Buffer) { buf.AppendTime(ti, t.option.Layout) })
 		}
 		return
 	}
