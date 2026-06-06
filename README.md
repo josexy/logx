@@ -29,6 +29,26 @@ func main() {
 }
 ```
 
+### Dynamic Level
+
+```go
+func main() {
+	atomicLevel := logx.NewAtomicLevel(logx.LevelInfo)
+
+	logger := logx.NewLogContext().
+		WithAtomicLevel(atomicLevel).
+		WithEncoder(logx.Console).
+		WithWriter(os.Stdout).
+		Build()
+
+	logger.Info("visible")
+	logger.Debug("hidden")
+
+	atomicLevel.SetLevel(logx.LevelDebug)
+	logger.Debug("visible now")
+}
+```
+
 ### Advanced Configuration
 
 ```go

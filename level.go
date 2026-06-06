@@ -1,5 +1,7 @@
 package logx
 
+import "sync/atomic"
+
 type LevelType uint8
 
 const (
@@ -41,6 +43,24 @@ var (
 		LevelPanic: HiYellowAttr,
 	}
 )
+
+type AtomicLevel struct {
+	level atomic.Uint32
+}
+
+func NewAtomicLevel(level LevelType) *AtomicLevel {
+	al := &AtomicLevel{}
+	al.SetLevel(level)
+	return al
+}
+
+func (al *AtomicLevel) SetLevel(level LevelType) {
+	al.level.Store(uint32(level))
+}
+
+func (al *AtomicLevel) Level() LevelType {
+	return LevelType(al.level.Load())
+}
 
 type LevelOption struct {
 	// level key, default: "level"
