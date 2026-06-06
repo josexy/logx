@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 )
@@ -186,6 +187,112 @@ func TestJsonLogger(t *testing.T) {
 		}
 		t.Logf("%+v", obj)
 	}
+}
+
+func TestAtomicLevelDynamicUpdate(t *testing.T) {
+	var buffer bytes.Buffer
+	atomicLevel := NewAtomicLevel(LevelInfo)
+	logger := NewLogContext().
+		WithAtomicLevel(atomicLevel).
+		WithWriter(AddSync(&buffer)).
+		WithEncoder(Console).
+		Build()
+
+	logger.Debug("debug hidden")
+	if got := buffer.String(); got != "" {
+		t.Fatalf("expected debug log to be skipped, got %q", got)
+	}
+
+	atomicLevel.SetLevel(LevelDebug)
+	logger.Debug("debug visible")
+	if got, want := buffer.String(), "debug visible\n"; got != want {
+		t.Fatalf("unexpected log output: got %q, want %q", got, want)
+	}
+}
+
+func TestAtomicLevelSetWarnSkipsInfo(t *testing.T) {
+	var buffer bytes.Buffer
+	atomicLevel := NewAtomicLevel(LevelTrace)
+	logger := NewLogContext().
+		WithAtomicLevel(atomicLevel).
+		WithWriter(AddSync(&buffer)).
+		WithEncoder(Console).
+		Build()
+
+	atomicLevel.SetLevel(LevelWarn)
+	logger.Info("info hidden")
+	if got := buffer.String(); got != "" {
+		t.Fatalf("expected info log to be skipped, got %q", got)
+	}
+
+	logger.Warn("warn visible")
+	if got, want := buffer.String(), "warn visible\n"; got != want {
+		t.Fatalf("unexpected log output: got %q, want %q", got, want)
+	}
+}
+
+func TestAtomicLevelWithLoggerIsIndependent(t *testing.T) {
+	var buffer bytes.Buffer
+	atomicLevel := NewAtomicLevel(LevelInfo)
+	logger := NewLogContext().
+		WithAtomicLevel(atomicLevel).
+		WithWriter(AddSync(&buffer)).
+		WithEncoder(Console).
+		Build()
+	child := logger.With(String("scope", "child"))
+
+	atomicLevel.SetLevel(LevelDebug)
+	logger.Debug("parent visible")
+	child.Debug("child hidden")
+
+	if got, want := buffer.String(), "parent visible\n"; got != want {
+		t.Fatalf("expected child logger to keep copied level, got %q, want %q", got, want)
+	}
+}
+
+func TestAtomicLevelConcurrentSetLevelAndLog(t *testing.T) {
+	atomicLevel := NewAtomicLevel(LevelInfo)
+	logger := NewLogContext().
+		WithAtomicLevel(atomicLevel).
+		WithWriter(AddSync(nullWriter{})).
+		WithEncoder(Console).
+		Build()
+
+	levels := []LevelType{
+		LevelTrace,
+		LevelDebug,
+		LevelInfo,
+		LevelWarn,
+		LevelError,
+		LevelFatal,
+		LevelPanic,
+	}
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 1000; i++ {
+			logger.Debug("debug")
+			logger.Info("info")
+			logger.Warn("warn")
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 1000; i++ {
+			atomicLevel.SetLevel(levels[i%len(levels)])
+			_ = atomicLevel.Level()
+		}
+	}()
+
+	close(start)
+	wg.Wait()
 }
 
 type nullWriter struct{}
