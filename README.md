@@ -1,15 +1,17 @@
 # logx
 
-A simple, colorful and flexible logging library for Go.
+A small structured logging library for Go with console, JSON, and text encoders.
 
 ## Features
 
-- 🎨 Colorful console output
-- 📊 Multiple log levels support (Trace, Debug, Info, Warn, Error)
-- 🔍 Customizable caller information
-- ⚙️ Flexible configuration options
-- 🎯 Structured logging with key-value pairs
-- ⏰ Customizable timestamp format
+- Console, JSON, and text output formats
+- Trace, debug, info, warn, error, fatal, and panic levels
+- Structured fields with primitive values, arrays, objects, errors, durations, and time values
+- Optional time, level, and caller fields
+- Runtime log level updates with `AtomicLevel`
+- Custom field keys, timestamp layouts, and caller formatting
+- Inherited logger fields with `With`, `WithFields`, and `WithNewFields`
+- Optional ANSI color output for terminal logs
 
 ## Installation
 
@@ -17,76 +19,152 @@ A simple, colorful and flexible logging library for Go.
 go get github.com/josexy/logx
 ```
 
-## Usage
-
-### Basic Example
+## Quick Start
 
 ```go
+package main
+
+import (
+	"os"
+	"time"
+
+	"github.com/josexy/logx"
+)
+
 func main() {
-	// Create a simple console logger with default settings
-	logger := logx.NewLogContext().WithLevel(logx.LevelTrace).WithEncoder(logx.Console).WithWriter(os.Stdout).Build()
-	logger.Info("Hello logx!")
-}
-```
-
-### Dynamic Level
-
-```go
-func main() {
-	atomicLevel := logx.NewAtomicLevel(logx.LevelInfo)
-
 	logger := logx.NewLogContext().
-		WithAtomicLevel(atomicLevel).
+		WithLevel(logx.LevelTrace).
+		WithLevelKey(true, logx.LevelOption{}).
+		WithTimeKey(true, logx.TimeOption{Layout: time.DateTime}).
+		WithWriter(logx.Lock(logx.AddSync(os.Stdout))).
 		WithEncoder(logx.Console).
-		WithWriter(os.Stdout).
 		Build()
 
-	logger.Info("visible")
-	logger.Debug("hidden")
-
-	atomicLevel.SetLevel(logx.LevelDebug)
-	logger.Debug("visible now")
+	logger.Info("server started",
+		logx.Int("port", 8080),
+		logx.String("url", "http://localhost:8080"),
+	)
 }
 ```
 
-### Advanced Configuration
+Example console output:
+
+```text
+2026-06-18 14:11:48	INFO	server started	{"port":8080,"url":"http://localhost:8080"}
+```
+
+## Console Encoder
+
+Use the console encoder for readable local development logs. It prints time, level, caller, message, and structured fields.
 
 ```go
-func main() {
-	logCtx := logx.NewLogContext().
-		WithLevel(logx.LevelTrace).
-		WithColorfulset(true, logx.TextColorAttri{}).                                                           // Enable colored output
-		WithLevelKey(true, logx.LevelOption{}).                                                                 // Show log level
-		WithCallerKey(true, logx.CallerOption{}).                                                               // Show caller information
-		WithWriter(logx.AddSync(logx.Output)).                                                                 // Set output writer
-		WithEncoder(logx.Console).                                                                              // Use console encoder
-		WithTimeKey(true, logx.TimeOption{}) // Customize time format
+logger := logx.NewLogContext().
+	WithLevel(logx.LevelTrace).
+	WithColorfulset(true, logx.TextColorAttri{
+		NumberColor: logx.CyanAttr,
+	}).
+	WithLevelKey(true, logx.LevelOption{}).
+	WithCallerKey(true, logx.CallerOption{Formatter: logx.ShortFile}).
+	WithTimeKey(true, logx.TimeOption{}).
+	WithWriter(logx.Lock(logx.AddSync(logx.Output))).
+	WithEncoder(logx.Console).
+	WithEscapeQuote(true).
+	Build()
 
-	logger := logCtx.Build()
-
-	// Different log levels with structured fields
-	logger.Trace("this is a trace message", logx.String("key", "value"), logx.Int("key", 2222))
-	logger.Debug("this is a debug message")
-	logger.Info("this is an info message")
-	logger.Warn("this is a warning message")
-	logger.Error("this is an error message")
-	logger.With(logx.String("os", runtime.GOOS)).Debug("this is a debug message")
-
-	logger2 := logCtx.Copy().WithFields(logx.String("arch", runtime.GOARCH)).WithEncoder(logx.Json).Build()
-	logger2.Debug("this is a debug message")
-}
+logger.Trace("trace message", logx.String("quoted", `"value"`), logx.Int("attempt", 1))
+logger.Error("error message", logx.Error("err", io.EOF))
 ```
 
-output:
+## Dynamic Level
 
+Use `AtomicLevel` when you need to update the minimum log level at runtime without rebuilding existing loggers.
+
+```go
+level := logx.NewAtomicLevel(logx.LevelWarn)
+
+logger := logx.NewLogContext().
+	WithAtomicLevel(level).
+	WithLevelKey(true, logx.LevelOption{}).
+	WithTimeKey(true, logx.TimeOption{}).
+	WithWriter(logx.Lock(logx.AddSync(logx.Output))).
+	WithEncoder(logx.Console).
+	Build()
+
+logger.Info("not printed")
+logger.Warn("printed before level update")
+
+level.SetLevel(logx.LevelDebug)
+logger.Debug("printed after level update")
+logger.Info("also printed after level update")
 ```
-2025-03-21 16:12:21     TRACE   example/main.go:213     this is a trace message {"key":"value","key":2222}
-2025-03-21 16:12:21     DEBUG   example/main.go:214     this is a debug message
-2025-03-21 16:12:21     INFO    example/main.go:215     this is an info message
-2025-03-21 16:12:21     WARN    example/main.go:216     this is a warning message
-2025-03-21 16:12:21     ERROR   example/main.go:217     this is an error message
-2025-03-21 16:12:21     DEBUG   example/main.go:218     this is a debug message {"os":"linux"}
-{"level":"DEBUG","time":"2025-03-21 16:12:21","caller":{"file":"example/main.go:221"},"arch":"amd64","msg":"this is a debug message"}
+
+## JSON Encoder
+
+Use the JSON encoder for structured logs consumed by log collectors.
+
+```go
+logger := logx.NewLogContext().
+	WithLevel(logx.LevelTrace).
+	WithLevelKey(true, logx.LevelOption{}).
+	WithTimeKey(true, logx.TimeOption{Layout: time.RFC3339}).
+	WithCallerKey(true, logx.CallerOption{Formatter: logx.ShortFileFunc}).
+	WithWriter(logx.Lock(logx.AddSync(logx.Output))).
+	WithFields(
+		logx.String("service", "logx-example"),
+		logx.String("env", "dev"),
+	).
+	WithEncoder(logx.Json).
+	WithEscapeQuote(true).
+	WithReflectValue(true).
+	Build()
+
+logger.Info("request handled",
+	logx.Int("status", 200),
+	logx.Duration("latency", 23*time.Millisecond),
+	logx.Object("user",
+		logx.Int("id", 10001),
+		logx.String("name", "guest"),
+	),
+)
+```
+
+Example JSON output:
+
+```json
+{"level":"INFO","time":"2026-06-18T14:11:48+08:00","service":"logx-example","env":"dev","msg":"request handled","status":200,"latency":"23ms","user":{"id":10001,"name":"guest"}}
+```
+
+## Text Encoder
+
+Use the text encoder for key-value logs similar to Go's `slog.TextHandler`.
+
+```go
+logger := logx.NewLogContext().
+	WithLevel(logx.LevelTrace).
+	WithTimeKey(true, logx.TimeOption{Layout: time.RFC3339Nano}).
+	WithLevelKey(true, logx.LevelOption{}).
+	WithCallerKey(true, logx.CallerOption{Formatter: logx.ShortFileFunc}).
+	WithWriter(logx.Lock(logx.AddSync(logx.Output))).
+	WithFields(logx.String("service", "logx-example")).
+	WithEncoder(logx.Text).
+	Build()
+
+logger.Info("http server started",
+	logx.Bool("middleware", true),
+	logx.Bool("handler", true),
+	logx.Int("port", 8080),
+	logx.String("url", "http://localhost:8080"),
+	logx.Object("runtime",
+		logx.String("os", runtime.GOOS),
+		logx.String("arch", runtime.GOARCH),
+	),
+)
+```
+
+Example text output:
+
+```text
+time=2026-06-18T14:11:48.7469115+08:00 level=INFO caller.file=example/main.go:97 caller.func=main.runTextExample msg="http server started" service=logx-example middleware=true handler=true port=8080 url=http://localhost:8080 runtime.os=windows runtime.arch=amd64
 ```
 
 ## License

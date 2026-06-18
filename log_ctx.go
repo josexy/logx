@@ -40,6 +40,8 @@ func (lc *LogContext) Copy() *LogContext {
 		newLogCtx = newLogCtx.WithEncoder(Json)
 	case *ConsoleEncoder:
 		newLogCtx = newLogCtx.WithEncoder(Console)
+	case *TextEncoder:
+		newLogCtx = newLogCtx.WithEncoder(Text)
 	}
 	return newLogCtx
 }
@@ -142,6 +144,8 @@ func (lc *LogContext) WithEncoder(encoder EncoderType) *LogContext {
 		lc.enc = &ConsoleEncoder{LogContext: lc}
 	case Json:
 		lc.enc = &JsonEncoder{LogContext: lc}
+	case Text:
+		lc.enc = &TextEncoder{LogContext: lc}
 	default:
 		panic("not support other log encoder")
 	}
