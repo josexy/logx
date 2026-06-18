@@ -44,35 +44,29 @@ var (
 	}
 )
 
-type LevelOption struct {
-	// level key, default: "level"
-	LevelKey string
-	// lower level key
-	LowerKey bool
-}
-
 type AtomicLevel struct {
 	level atomic.Uint32
 }
 
 func NewAtomicLevel(level LevelType) *AtomicLevel {
-	atomicLevel := &AtomicLevel{}
-	atomicLevel.SetLevel(level)
-	return atomicLevel
+	al := &AtomicLevel{}
+	al.SetLevel(level)
+	return al
 }
 
-func (lvl *AtomicLevel) Level() LevelType {
-	if lvl == nil {
-		return LevelTrace
-	}
-	return LevelType(lvl.level.Load())
+func (al *AtomicLevel) SetLevel(level LevelType) {
+	al.level.Store(uint32(level))
 }
 
-func (lvl *AtomicLevel) SetLevel(level LevelType) {
-	if lvl == nil {
-		return
-	}
-	lvl.level.Store(uint32(level))
+func (al *AtomicLevel) Level() LevelType {
+	return LevelType(al.level.Load())
+}
+
+type LevelOption struct {
+	// level key, default: "level"
+	LevelKey string
+	// lower level key
+	LowerKey bool
 }
 
 type levelField struct {

@@ -150,7 +150,7 @@ func (l *LoggerX) FatalWith(err error) {
 }
 
 func (l *LoggerX) skipLevelLog(expect LevelType) bool {
-	return l.logCtx.level() > expect
+	return l.logCtx.AtomicLevel().Level() > expect
 }
 
 func (l *LoggerX) clone() *LoggerX {
@@ -189,7 +189,7 @@ func (l *LoggerX) output(level LevelType, msg string, fields []Field) {
 	l.logCtx.writer.Write(buf.Bytes())
 	bufPool.Put(buf)
 
-	if l.logCtx.level() > LevelError {
+	if l.logCtx.AtomicLevel().Level() > LevelError {
 		_ = l.logCtx.writer.Sync()
 	}
 }

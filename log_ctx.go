@@ -10,8 +10,7 @@ var bufPool = sync.Pool{
 }
 
 type LogContext struct {
-	levelT       LevelType
-	atomicLevel  *AtomicLevel
+	level        *AtomicLevel
 	levelF       levelField
 	timeF        timeField
 	callerF      callerField
@@ -25,12 +24,13 @@ type LogContext struct {
 }
 
 func NewLogContext() *LogContext {
-	return &LogContext{}
+	return &LogContext{level: NewAtomicLevel(LevelTrace)}
 }
 
 func (lc *LogContext) Copy() *LogContext {
 	newLogCtx := new(LogContext)
 	*newLogCtx = *lc
+	newLogCtx.level = NewAtomicLevel(lc.AtomicLevel().Level())
 	if len(lc.preFields) > 0 {
 		newLogCtx.preFields = make([]Field, 0, len(lc.preFields))
 		newLogCtx.preFields = append(newLogCtx.preFields, lc.preFields...)
@@ -153,24 +153,23 @@ func (lc *LogContext) WithEncoder(encoder EncoderType) *LogContext {
 }
 
 func (lc *LogContext) WithLevel(level LevelType) *LogContext {
-	lc.levelT = level
-	lc.atomicLevel = nil
+	lc.AtomicLevel().SetLevel(level)
 	return lc
 }
 
 func (lc *LogContext) WithAtomicLevel(level *AtomicLevel) *LogContext {
-	lc.atomicLevel = level
-	if level != nil {
-		lc.levelT = level.Level()
+	if level == nil {
+		level = NewAtomicLevel(LevelTrace)
 	}
+	lc.level = level
 	return lc
 }
 
-func (lc *LogContext) level() LevelType {
-	if lc.atomicLevel != nil {
-		return lc.atomicLevel.Level()
+func (lc *LogContext) AtomicLevel() *AtomicLevel {
+	if lc.level == nil {
+		lc.level = NewAtomicLevel(LevelTrace)
 	}
-	return lc.levelT
+	return lc.level
 }
 
 func (lc *LogContext) Build() Logger {
