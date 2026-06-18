@@ -11,6 +11,7 @@ var bufPool = sync.Pool{
 
 type LogContext struct {
 	levelT       LevelType
+	atomicLevel  *AtomicLevel
 	levelF       levelField
 	timeF        timeField
 	callerF      callerField
@@ -39,6 +40,8 @@ func (lc *LogContext) Copy() *LogContext {
 		newLogCtx = newLogCtx.WithEncoder(Json)
 	case *ConsoleEncoder:
 		newLogCtx = newLogCtx.WithEncoder(Console)
+	case *TextEncoder:
+		newLogCtx = newLogCtx.WithEncoder(Text)
 	}
 	return newLogCtx
 }
@@ -141,6 +144,8 @@ func (lc *LogContext) WithEncoder(encoder EncoderType) *LogContext {
 		lc.enc = &ConsoleEncoder{LogContext: lc}
 	case Json:
 		lc.enc = &JsonEncoder{LogContext: lc}
+	case Text:
+		lc.enc = &TextEncoder{LogContext: lc}
 	default:
 		panic("not support other log encoder")
 	}
@@ -149,7 +154,23 @@ func (lc *LogContext) WithEncoder(encoder EncoderType) *LogContext {
 
 func (lc *LogContext) WithLevel(level LevelType) *LogContext {
 	lc.levelT = level
+	lc.atomicLevel = nil
 	return lc
+}
+
+func (lc *LogContext) WithAtomicLevel(level *AtomicLevel) *LogContext {
+	lc.atomicLevel = level
+	if level != nil {
+		lc.levelT = level.Level()
+	}
+	return lc
+}
+
+func (lc *LogContext) level() LevelType {
+	if lc.atomicLevel != nil {
+		return lc.atomicLevel.Level()
+	}
+	return lc.levelT
 }
 
 func (lc *LogContext) Build() Logger {
