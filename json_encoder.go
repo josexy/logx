@@ -12,7 +12,8 @@ var jsonPool = sync.Pool{New: func() any { return &JsonEncoder{} }}
 
 type JsonEncoder struct {
 	*LogContext
-	buf *Buffer
+	buf        *Buffer
+	jsonOutput bool
 }
 
 func (enc *JsonEncoder) Init() {
@@ -28,6 +29,7 @@ func (enc *JsonEncoder) Init() {
 func (enc *JsonEncoder) clone() *JsonEncoder {
 	clone := jsonPool.Get().(*JsonEncoder)
 	clone.LogContext = enc.LogContext
+	clone.jsonOutput = enc.jsonOutput
 	clone.buf = bufPool.Get().(*Buffer)
 	clone.buf.Reset()
 	return clone
@@ -36,6 +38,7 @@ func (enc *JsonEncoder) clone() *JsonEncoder {
 func putJsonEncoder(enc *JsonEncoder) {
 	enc.LogContext = nil
 	enc.buf = nil
+	enc.jsonOutput = false
 	jsonPool.Put(enc)
 }
 
@@ -45,7 +48,12 @@ func (enc *JsonEncoder) Encode(ent entry, fields []Field) (ret *Buffer, err erro
 
 	nenc.writeBeginObject()
 	nenc.writePromptFields(&ent)
-	if nenc.writePrefixFields() {
+	wrotePrefix, prefixErr := nenc.writePrefixFields()
+	if prefixErr != nil {
+		bufPool.Put(nenc.buf)
+		return nil, prefixErr
+	}
+	if wrotePrefix {
 		nenc.writeSplitComma()
 	}
 	nenc.writeMsg(ent.message)
@@ -101,18 +109,20 @@ func (enc *JsonEncoder) writeMsg(msg string) {
 	enc.writeFieldString(msg)
 }
 
-func (enc *JsonEncoder) writePrefixFields() bool {
+func (enc *JsonEncoder) writePrefixFields() (bool, error) {
 	n := len(enc.preFields)
 	if n == 0 {
-		return false
+		return false, nil
 	}
 	for i := 0; i < n; i++ {
-		enc.writeField(&enc.preFields[i])
+		if err := enc.writeField(&enc.preFields[i]); err != nil {
+			return false, err
+		}
 		if i+1 != n {
 			enc.writeSplitComma()
 		}
 	}
-	return true
+	return true, nil
 }
 
 func (enc *JsonEncoder) writeQuote() {
@@ -194,11 +204,11 @@ func (enc *JsonEncoder) writeField(field *Field) error {
 	return nil
 }
 
-func (enc *JsonEncoder) colorEnabled() bool { return enc.colors.enable }
+func (enc *JsonEncoder) colorEnabled() bool { return enc.colors.enable && !enc.jsonOutput }
 
 func (enc *JsonEncoder) writeFieldKey(key string) {
 	enc.writeQuote()
-	if enc.escapeQuote {
+	if enc.jsonOutput || enc.escapeQuote {
 		writeFieldWrapper(enc, enc.colors.attr.KeyColor, func(buf *Buffer) { appendQuoteString(buf, key) })
 	} else {
 		writeFieldWrapper(enc, enc.colors.attr.KeyColor, func(buf *Buffer) { buf.AppendString(key) })
@@ -208,7 +218,7 @@ func (enc *JsonEncoder) writeFieldKey(key string) {
 
 func (enc *JsonEncoder) writeFieldString(value string) {
 	enc.writeQuote()
-	if enc.escapeQuote {
+	if enc.jsonOutput || enc.escapeQuote {
 		writeFieldWrapper(enc, enc.colors.attr.StringColor, func(buf *Buffer) { appendQuoteString(buf, value) })
 	} else {
 		writeFieldWrapper(enc, enc.colors.attr.StringColor, func(buf *Buffer) { buf.AppendString(value) })
@@ -270,11 +280,31 @@ func (enc *JsonEncoder) writeFieldUint(value uint) {
 }
 
 func (enc *JsonEncoder) writeFieldFloat32(value float32) {
+	if enc.writeNonFiniteFloat(float64(value)) {
+		return
+	}
 	writeFieldWrapper(enc, enc.colors.attr.NumberColor, func(buf *Buffer) { buf.AppendFloat(float64(value), 32) })
 }
 
 func (enc *JsonEncoder) writeFieldFloat64(value float64) {
+	if enc.writeNonFiniteFloat(value) {
+		return
+	}
 	writeFieldWrapper(enc, enc.colors.attr.NumberColor, func(buf *Buffer) { buf.AppendFloat(value, 64) })
+}
+
+func (enc *JsonEncoder) writeNonFiniteFloat(value float64) bool {
+	switch {
+	case math.IsNaN(value):
+		enc.writeFieldString("NaN")
+	case math.IsInf(value, 1):
+		enc.writeFieldString("+Inf")
+	case math.IsInf(value, -1):
+		enc.writeFieldString("-Inf")
+	default:
+		return false
+	}
+	return true
 }
 
 func (enc *JsonEncoder) writeFieldTime(value time.Time) {
@@ -343,21 +373,25 @@ func (enc *JsonEncoder) writeMapObjectForMultipleValue(value map[string][]string
 
 func (enc *JsonEncoder) writeFieldObject(value []Field) {
 	enc.writeBeginObject()
-	n := len(value)
-	for i := 0; i < n; i++ {
-		if err := enc.writeField(&value[i]); err != nil {
+	wroteField := false
+	for i := range value {
+		if value[i].Type == NoneType {
 			continue
 		}
-		if i+1 != n {
+		if wroteField {
 			enc.writeSplitComma()
 		}
+		_ = enc.writeField(&value[i])
+		wroteField = true
 	}
 	enc.writeEndObject()
 }
 
 func (enc *JsonEncoder) writeFieldSingleObject(value Field) {
 	enc.writeBeginObject()
-	enc.writeField(&value)
+	if value.Type != NoneType {
+		_ = enc.writeField(&value)
+	}
 	enc.writeEndObject()
 }
 

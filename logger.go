@@ -1,6 +1,11 @@
 package logx
 
+// ErrorHandler receives errors produced while encoding, writing, or syncing a
+// log entry. Implementations must be safe for concurrent use.
+type ErrorHandler func(error)
+
 type Logger interface {
+	Enabled(level LevelType) bool
 	Trace(msg string, fields ...Field)
 	Debug(msg string, fields ...Field)
 	Info(msg string, fields ...Field)
@@ -19,4 +24,5 @@ type Logger interface {
 	ErrorWith(err error)
 	FatalWith(err error)
 	With(fields ...Field) Logger
+	Sync() error
 }

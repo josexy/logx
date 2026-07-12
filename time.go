@@ -26,6 +26,22 @@ func (t *timeField) AppendField(enc *JsonEncoder, ti time.Time) {
 }
 
 func (t *timeField) AppendTime(enc *JsonEncoder, ti time.Time) {
+	if enc.jsonOutput {
+		if t.option.Timestamp {
+			enc.buf.AppendInt(ti.UnixNano())
+			return
+		}
+		enc.writeQuote()
+		start := enc.buf.Len()
+		enc.buf.AppendTime(ti, t.option.Layout)
+		if value := enc.buf.bs[start:]; jsonBytesNeedEscaping(value) {
+			formatted := string(value)
+			enc.buf.bs = enc.buf.bs[:start]
+			enc.buf.bs = appendQuotedWith(enc.buf.bs, formatted)
+		}
+		enc.writeQuote()
+		return
+	}
 	if !t.option.Timestamp {
 		enc.writeQuote()
 	}

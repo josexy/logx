@@ -72,6 +72,7 @@ func runDynamicLevelExample() {
 	level.SetLevel(logx.LevelDebug)
 	logger.Debug("debug after level update")
 	logger.Info("info after level update")
+	logger.With(logx.String("component", "worker")).Debug("child logger after level update")
 }
 
 func runJSONExample() {
@@ -90,7 +91,6 @@ func runJSONExample() {
 			logx.String("arch", runtime.GOARCH),
 		).
 		WithEncoder(logx.Json).
-		WithEscapeQuote(true).
 		WithReflectValue(true).
 		Build()
 
