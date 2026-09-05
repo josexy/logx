@@ -79,7 +79,15 @@ func (lvl *levelField) AppendField(enc *JsonEncoder, level LevelType) {
 	enc.writeFieldKey(lvl.option.LevelKey)
 	enc.writeSplitColon()
 	enc.writeQuote()
-	lvl.AppendPrimitive(enc.buf, level)
+	if enc.jsonOutput {
+		if lvl.option.LowerKey {
+			enc.buf.AppendString(levelTypeLowerMap[level])
+		} else {
+			enc.buf.AppendString(levelTypeUpperMap[level])
+		}
+	} else {
+		lvl.AppendPrimitive(enc.buf, level)
+	}
 	enc.writeQuote()
 }
 

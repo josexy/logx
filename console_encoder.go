@@ -47,13 +47,17 @@ func (enc *ConsoleEncoder) Encode(ent entry, fields []Field) (ret *Buffer, err e
 	buf.AppendByte(ConsoleEncoderSplitCharacter)
 
 	jsonEnc.writeBeginObject()
-	jsonEnc.writePrefixFields()
+	wrotePrefix, prefixErr := jsonEnc.writePrefixFields()
+	if prefixErr != nil {
+		bufPool.Put(buf)
+		return nil, prefixErr
+	}
 	if n1 == 0 {
 		jsonEnc.writeEndObject()
 		ret = buf
 		return
 	}
-	if n2 > 0 {
+	if wrotePrefix {
 		jsonEnc.writeSplitComma()
 	}
 	for i := 0; i < n1; i++ {

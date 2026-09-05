@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"math"
 	"net/netip"
 	"runtime"
 	"strconv"
@@ -186,6 +187,58 @@ func TestJsonEncoderFieldTypes(t *testing.T) {
 	}
 }
 
+func TestJsonEncoderAlwaysProducesValidJSON(t *testing.T) {
+	oldNoColor := NoColor
+	NoColor = false
+	defer func() { NoColor = oldNoColor }()
+
+	invalidUTF8 := string([]byte{'a', 0xff, 'b'})
+	ctx := NewLogContext().
+		WithColorfulset(true, TextColorAttri{}).
+		WithTimeKey(true, TimeOption{Layout: `2006"01`})
+	ent := entry{
+		level:   LevelInfo,
+		time:    time.Date(2026, time.July, 12, 1, 2, 3, 0, time.UTC),
+		message: "quoted \"message\"\\with\nnewline\a",
+	}
+
+	encoded := encodeForTest(t, ctx, Json, ent, []Field{
+		String("quoted\"key", "value\vwith\tcontrols"),
+		String("invalidUTF8", invalidUTF8),
+		Float64("nan", math.NaN()),
+		Float64("positiveInfinity", math.Inf(1)),
+		Float64("negativeInfinity", math.Inf(-1)),
+		Object("object", String("valid", "field"), Field{}),
+	})
+
+	if !json.Valid([]byte(encoded)) {
+		t.Fatalf("Json encoder produced invalid JSON: %q", encoded)
+	}
+	if strings.Contains(encoded, "\x1b[") {
+		t.Fatalf("Json encoder emitted ANSI color codes: %q", encoded)
+	}
+
+	got := decodeJSONLog(t, encoded)
+	if got["msg"] != ent.message {
+		t.Fatalf("msg = %q, want %q", got["msg"], ent.message)
+	}
+	if got["time"] != `2026"07` {
+		t.Fatalf("time = %q, want %q", got["time"], `2026"07`)
+	}
+	if got[`quoted"key`] != "value\vwith\tcontrols" {
+		t.Fatalf("quoted field = %q", got[`quoted"key`])
+	}
+	if got["invalidUTF8"] != "a\ufffdb" {
+		t.Fatalf("invalidUTF8 = %q, want %q", got["invalidUTF8"], "a\ufffdb")
+	}
+	if got["nan"] != "NaN" || got["positiveInfinity"] != "+Inf" || got["negativeInfinity"] != "-Inf" {
+		t.Fatalf("unexpected non-finite float encoding: %#v", got)
+	}
+	if object := got["object"].(map[string]any); object["valid"] != "field" || len(object) != 1 {
+		t.Fatalf("unexpected object: %#v", object)
+	}
+}
+
 func TestTextEncoderExampleOutput(t *testing.T) {
 	loc := time.FixedZone("CST", 8*60*60)
 	ent := entry{
@@ -220,6 +273,20 @@ func TestTextEncoderDefaultTimeLayoutIsQuoted(t *testing.T) {
 	want := `time="2026-06-18 09:18:35" msg=msg`
 	if got := encodeForTest(t, logCtx, Text, ent, nil); got != want {
 		t.Fatalf("got %s, want %s", got, want)
+	}
+}
+
+func TestTimeFieldUsesDefaultLayoutWithoutPromptTime(t *testing.T) {
+	value := time.Date(2026, time.July, 12, 14, 30, 45, 0, time.UTC)
+	ent := entry{level: LevelInfo, time: time.Unix(0, 0), message: "message"}
+
+	jsonLog := decodeJSONLog(t, encodeForTest(t, NewLogContext(), Json, ent, []Field{Time("eventTime", value)}))
+	if got, want := jsonLog["eventTime"], value.Format(time.DateTime); got != want {
+		t.Fatalf("JSON eventTime = %q, want %q", got, want)
+	}
+
+	if got, want := encodeTextForTest(t, NewLogContext(), ent, []Field{Time("eventTime", value)}), `msg=message eventTime="2026-07-12 14:30:45"`; got != want {
+		t.Fatalf("Text eventTime output = %q, want %q", got, want)
 	}
 }
 
@@ -385,6 +452,22 @@ func TestLogContextCopyAndInvalidEncoder(t *testing.T) {
 	NewLogContext().WithEncoder(EncoderType(0))
 }
 
+func TestLogContextCopyHasIndependentLevel(t *testing.T) {
+	level := NewAtomicLevel(LevelInfo)
+	original := NewLogContext().WithAtomicLevel(level)
+	copied := original.Copy()
+
+	level.SetLevel(LevelDebug)
+	if got := copied.AtomicLevel().Level(); got != LevelInfo {
+		t.Fatalf("copied level changed with original: got %v, want %v", got, LevelInfo)
+	}
+
+	copied.WithLevel(LevelError)
+	if got := original.AtomicLevel().Level(); got != LevelDebug {
+		t.Fatalf("original level changed with copy: got %v, want %v", got, LevelDebug)
+	}
+}
+
 type recordingWriteSyncer struct {
 	bytes.Buffer
 	syncs int
@@ -393,6 +476,37 @@ type recordingWriteSyncer struct {
 func (w *recordingWriteSyncer) Sync() error {
 	w.syncs++
 	return nil
+}
+
+type errorWriteSyncer struct {
+	writeErr   error
+	syncErr    error
+	shortWrite bool
+	syncs      int
+}
+
+func (w *errorWriteSyncer) Write(p []byte) (int, error) {
+	if w.writeErr != nil {
+		return 0, w.writeErr
+	}
+	if w.shortWrite && len(p) > 0 {
+		return len(p) - 1, nil
+	}
+	return len(p), nil
+}
+
+func (w *errorWriteSyncer) Sync() error {
+	w.syncs++
+	return w.syncErr
+}
+
+type countingStringer struct {
+	calls *int
+}
+
+func (s countingStringer) String() string {
+	(*s.calls)++
+	return "formatted"
 }
 
 func encodeForTest(t *testing.T, ctx *LogContext, encoderType EncoderType, ent entry, fields []Field) string {
@@ -424,6 +538,10 @@ func decodeJSONLog(t *testing.T, data string) map[string]any {
 }
 
 func TestBufferIOHelpers(t *testing.T) {
+	if got := NewBuffer(nil).String(); got != "" {
+		t.Fatalf("empty Buffer.String() = %q, want empty", got)
+	}
+
 	buf := NewBuffer(make([]byte, 0, 4))
 	buf.AppendBytes([]byte("go"))
 
@@ -453,6 +571,9 @@ func TestBufferIOHelpers(t *testing.T) {
 func TestAddSyncAndLock(t *testing.T) {
 	if got := AddSync(nil); got != nil {
 		t.Fatalf("AddSync(nil) = %T, want nil", got)
+	}
+	if got := Lock(nil); got != nil {
+		t.Fatalf("Lock(nil) = %T, want nil", got)
 	}
 
 	raw := bytes.NewBuffer(nil)
@@ -507,6 +628,206 @@ func TestLoggerLevelFilteringAndFormattedMethods(t *testing.T) {
 	want := "msg=\"warn 2\"\nmsg=<nil>\n"
 	if got := buffer.String(); got != want {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestLoggerEnabledSkipsDisabledFormatting(t *testing.T) {
+	buffer := bytes.NewBuffer(nil)
+	logger := NewLogContext().
+		WithLevel(LevelWarn).
+		WithWriter(AddSync(buffer)).
+		WithEncoder(Text).
+		Build()
+
+	if logger.Enabled(LevelInfo) {
+		t.Fatal("Info should be disabled at Warn level")
+	}
+	if !logger.Enabled(LevelError) {
+		t.Fatal("Error should be enabled at Warn level")
+	}
+
+	calls := 0
+	value := countingStringer{calls: &calls}
+	logger.Infof("disabled %s", value)
+	if calls != 0 {
+		t.Fatalf("disabled Infof formatted its arguments %d time(s)", calls)
+	}
+	logger.Errorf("enabled %s", value)
+	if calls != 1 {
+		t.Fatalf("enabled Errorf formatted its arguments %d time(s), want 1", calls)
+	}
+	if got, want := buffer.String(), "msg=\"enabled formatted\"\n"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestLoggerSyncAndHighSeverityFlush(t *testing.T) {
+	writer := &recordingWriteSyncer{}
+	logger := NewLogContext().
+		WithLevel(LevelTrace).
+		WithWriter(writer).
+		WithEncoder(Text).
+		Build()
+
+	if err := logger.Sync(); err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+	if writer.syncs != 1 {
+		t.Fatalf("Sync() count = %d, want 1", writer.syncs)
+	}
+
+	func() {
+		defer func() { _ = recover() }()
+		logger.Panic("flush before panic")
+	}()
+	if writer.syncs != 2 {
+		t.Fatalf("Panic() Sync count = %d, want 2", writer.syncs)
+	}
+}
+
+func TestLoggerReportsOutputErrors(t *testing.T) {
+	writeErr := errors.New("write failed")
+	syncErr := errors.New("sync failed")
+	tests := []struct {
+		name      string
+		writer    *errorWriteSyncer
+		log       func(Logger)
+		wantError error
+		wantSyncs int
+	}{
+		{
+			name:      "encode error",
+			writer:    &errorWriteSyncer{},
+			log:       func(logger Logger) { logger.Info("message", Field{}) },
+			wantError: errInvalidFieldType,
+		},
+		{
+			name:      "write error",
+			writer:    &errorWriteSyncer{writeErr: writeErr},
+			log:       func(logger Logger) { logger.Info("message") },
+			wantError: writeErr,
+		},
+		{
+			name:      "short write",
+			writer:    &errorWriteSyncer{shortWrite: true},
+			log:       func(logger Logger) { logger.Info("message") },
+			wantError: io.ErrShortWrite,
+		},
+		{
+			name:   "high severity sync error",
+			writer: &errorWriteSyncer{syncErr: syncErr},
+			log: func(logger Logger) {
+				defer func() { _ = recover() }()
+				logger.Panic("message")
+			},
+			wantError: syncErr,
+			wantSyncs: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got error
+			logger := NewLogContext().
+				WithWriter(tt.writer).
+				WithErrorHandler(func(err error) { got = err }).
+				WithEncoder(Text).
+				Build()
+
+			tt.log(logger)
+			if !errors.Is(got, tt.wantError) {
+				t.Fatalf("reported error = %v, want %v", got, tt.wantError)
+			}
+			if tt.writer.syncs != tt.wantSyncs {
+				t.Fatalf("Sync() count = %d, want %d", tt.writer.syncs, tt.wantSyncs)
+			}
+		})
+	}
+}
+
+func TestPanicAttemptsSyncAfterOutputFailure(t *testing.T) {
+	writeErr := errors.New("write failed")
+	tests := []struct {
+		name      string
+		writer    *errorWriteSyncer
+		fields    []Field
+		wantError error
+	}{
+		{
+			name:      "encode error",
+			writer:    &errorWriteSyncer{},
+			fields:    []Field{{}},
+			wantError: errInvalidFieldType,
+		},
+		{
+			name:      "write error",
+			writer:    &errorWriteSyncer{writeErr: writeErr},
+			wantError: writeErr,
+		},
+		{
+			name:      "short write",
+			writer:    &errorWriteSyncer{shortWrite: true},
+			wantError: io.ErrShortWrite,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got error
+			logger := NewLogContext().
+				WithWriter(tt.writer).
+				WithErrorHandler(func(err error) { got = err }).
+				WithEncoder(Text).
+				Build()
+
+			func() {
+				defer func() { _ = recover() }()
+				logger.Panic("message", tt.fields...)
+			}()
+
+			if !errors.Is(got, tt.wantError) {
+				t.Fatalf("reported error = %v, want %v", got, tt.wantError)
+			}
+			if tt.writer.syncs != 1 {
+				t.Fatalf("Sync() count = %d, want 1", tt.writer.syncs)
+			}
+		})
+	}
+}
+
+func TestPanicJoinsWriteAndSyncErrors(t *testing.T) {
+	writeErr := errors.New("write failed")
+	syncErr := errors.New("sync failed")
+	writer := &errorWriteSyncer{writeErr: writeErr, syncErr: syncErr}
+	var got error
+	logger := NewLogContext().
+		WithWriter(writer).
+		WithErrorHandler(func(err error) { got = err }).
+		WithEncoder(Text).
+		Build()
+
+	func() {
+		defer func() { _ = recover() }()
+		logger.Panic("message")
+	}()
+
+	if !errors.Is(got, writeErr) || !errors.Is(got, syncErr) {
+		t.Fatalf("reported error = %v, want joined write and sync errors", got)
+	}
+	if writer.syncs != 1 {
+		t.Fatalf("Sync() count = %d, want 1", writer.syncs)
+	}
+}
+
+func TestLoggerSyncReturnsWriterError(t *testing.T) {
+	syncErr := errors.New("sync failed")
+	logger := NewLogContext().
+		WithWriter(&errorWriteSyncer{syncErr: syncErr}).
+		WithEncoder(Text).
+		Build()
+
+	if err := logger.Sync(); !errors.Is(err, syncErr) {
+		t.Fatalf("Sync() error = %v, want %v", err, syncErr)
 	}
 }
 
@@ -615,6 +936,31 @@ func TestLoggerWithClonesPreFields(t *testing.T) {
 	}
 }
 
+func TestBuildFreezesConfigurationAndCopiesNewFields(t *testing.T) {
+	firstBuffer := bytes.NewBuffer(nil)
+	secondBuffer := bytes.NewBuffer(nil)
+	fields := []Field{String("scope", "initial")}
+	ctx := NewLogContext().
+		WithNewFields(fields...).
+		WithWriter(AddSync(firstBuffer)).
+		WithEncoder(Text)
+
+	fields[0] = String("scope", "mutated through caller slice")
+	logger := ctx.Build()
+	ctx.WithMsgKey("changed").
+		WithNewFields(String("scope", "changed after build")).
+		WithWriter(AddSync(secondBuffer)).
+		WithEncoder(Json)
+
+	logger.Info("message")
+	if got, want := firstBuffer.String(), "msg=message scope=initial\n"; got != want {
+		t.Fatalf("built logger changed with its source context: got %q, want %q", got, want)
+	}
+	if got := secondBuffer.String(); got != "" {
+		t.Fatalf("built logger wrote to a later configured writer: %q", got)
+	}
+}
+
 func TestLoggerPanicMethods(t *testing.T) {
 	buffer := bytes.NewBuffer(nil)
 	logger := NewLogContext().WithWriter(AddSync(buffer)).WithEncoder(Text).Build()
@@ -640,13 +986,33 @@ func TestLoggerPanicMethods(t *testing.T) {
 
 func TestLoggerDiscardAndNilWriterSkipOutput(t *testing.T) {
 	nilWriterLogger := NewLogContext().WithEncoder(Text).Build()
+	if nilWriterLogger.Enabled(LevelInfo) {
+		t.Fatal("logger with nil writer should be disabled")
+	}
 	nilWriterLogger.Info("nil writer")
 
-	discardLogger := NewLogContext().
-		WithWriter(AddSync(io.Discard)).
-		WithEncoder(Text).
-		Build()
-	discardLogger.Info("discard")
+	for _, tt := range []struct {
+		name   string
+		writer WriteSyncer
+	}{
+		{name: "AddSync", writer: AddSync(io.Discard)},
+		{name: "Lock", writer: Lock(AddSync(io.Discard))},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			discardLogger := NewLogContext().
+				WithWriter(tt.writer).
+				WithEncoder(Text).
+				Build()
+			if discardLogger.Enabled(LevelInfo) {
+				t.Fatal("logger writing to io.Discard should be disabled")
+			}
+			calls := 0
+			discardLogger.Infof("discard %s", countingStringer{calls: &calls})
+			if calls != 0 {
+				t.Fatalf("discard logger formatted arguments %d time(s)", calls)
+			}
+		})
+	}
 }
 
 func TestTextEncoderOptionsAndFieldTypes(t *testing.T) {
@@ -714,6 +1080,25 @@ func TestTextEncoderInvalidFieldsReturnError(t *testing.T) {
 			ctx.enc.Init()
 
 			buf, err := ctx.enc.Encode(ent, []Field{{Key: "bad"}})
+			if !errors.Is(err, errInvalidFieldType) {
+				t.Fatalf("Encode() error = %v, want %v", err, errInvalidFieldType)
+			}
+			if buf != nil {
+				t.Fatalf("Encode() buffer = %v, want nil", buf)
+			}
+		})
+	}
+}
+
+func TestEncodersInvalidPrefixFieldsReturnError(t *testing.T) {
+	ent := entry{level: LevelInfo, time: time.Unix(0, 0), message: "msg"}
+
+	for _, encType := range []EncoderType{Console, Json, Text} {
+		t.Run(strconv.Itoa(int(encType)), func(t *testing.T) {
+			ctx := NewLogContext().WithFields(Field{}).WithEncoder(encType)
+			ctx.enc.Init()
+
+			buf, err := ctx.enc.Encode(ent, nil)
 			if !errors.Is(err, errInvalidFieldType) {
 				t.Fatalf("Encode() error = %v, want %v", err, errInvalidFieldType)
 			}
@@ -825,6 +1210,31 @@ func TestFieldConstructorsAndTextQuotingEdges(t *testing.T) {
 	}
 }
 
+func FuzzJsonEncoderStrings(f *testing.F) {
+	f.Add("message", "key", "value")
+	f.Add("quoted \"message\"", "quoted\"key", "line one\nline two")
+	f.Add(string([]byte{0xff}), string([]byte{0xfe}), "\a\v\u2028\u2029")
+
+	f.Fuzz(func(t *testing.T, msg, key, value string) {
+		ctx := NewLogContext().WithEncoder(Json)
+		ctx.WithMsgKey(ctx.msgKey)
+		ctx.enc.Init()
+
+		buf, err := ctx.enc.Encode(entry{
+			level:   LevelInfo,
+			time:    time.Unix(0, 0),
+			message: msg,
+		}, []Field{String(key, value)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer bufPool.Put(buf)
+		if !json.Valid(buf.Bytes()) {
+			t.Fatalf("invalid JSON for msg=%q key=%q value=%q: %q", msg, key, value, buf.Bytes())
+		}
+	})
+}
+
 func TestAtomicLevelDynamicUpdate(t *testing.T) {
 	var buffer bytes.Buffer
 	atomicLevel := NewAtomicLevel(LevelInfo)
@@ -867,7 +1277,7 @@ func TestAtomicLevelSetWarnSkipsInfo(t *testing.T) {
 	}
 }
 
-func TestAtomicLevelWithLoggerIsIndependent(t *testing.T) {
+func TestAtomicLevelUpdatePropagatesToChildLogger(t *testing.T) {
 	var buffer bytes.Buffer
 	atomicLevel := NewAtomicLevel(LevelInfo)
 	logger := NewLogContext().
@@ -879,10 +1289,10 @@ func TestAtomicLevelWithLoggerIsIndependent(t *testing.T) {
 
 	atomicLevel.SetLevel(LevelDebug)
 	logger.Debug("parent visible")
-	child.Debug("child hidden")
+	child.Debug("child visible")
 
-	if got, want := buffer.String(), "parent visible\n"; got != want {
-		t.Fatalf("expected child logger to keep copied level, got %q, want %q", got, want)
+	if got, want := buffer.String(), "parent visible\nchild visible\t{\"scope\":\"child\"}\n"; got != want {
+		t.Fatalf("dynamic level did not propagate to child logger, got %q, want %q", got, want)
 	}
 }
 
@@ -933,7 +1343,7 @@ func TestAtomicLevelConcurrentSetLevelAndLog(t *testing.T) {
 
 type nullWriter struct{}
 
-func (w nullWriter) Write(b []byte) (n int, err error) { return }
+func (w nullWriter) Write(b []byte) (n int, err error) { return len(b), nil }
 
 func BenchmarkStdPrintLogger(b *testing.B) {
 	logger := log.New(nullWriter{}, "", 0)
