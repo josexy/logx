@@ -61,11 +61,11 @@ func (enc *TextEncoder) Encode(ent entry, fields []Field) (ret *Buffer, err erro
 	nenc.writeFieldKey(nenc.msgKey)
 	nenc.writeTextString(ent.message)
 	if err = nenc.writeFields("", nenc.preFields); err != nil {
-		bufPool.Put(nenc.buf)
+		putBuffer(nenc.buf)
 		return
 	}
 	if err = nenc.writeFields("", fields); err != nil {
-		bufPool.Put(nenc.buf)
+		putBuffer(nenc.buf)
 		return
 	}
 	ret = nenc.buf
@@ -82,7 +82,7 @@ func (enc *TextEncoder) writeFields(prefix string, fields []Field) error {
 }
 
 func (enc *TextEncoder) writeField(prefix string, field *Field) error {
-	if field.Type == NoneType {
+	if !field.valid() {
 		return errInvalidFieldType
 	}
 	key := field.Key
@@ -90,7 +90,17 @@ func (enc *TextEncoder) writeField(prefix string, field *Field) error {
 		key = prefix + "." + key
 	}
 	if field.Type == ObjectType {
-		return enc.writeFields(key, field.AnyValue.([]Field))
+		// Like the JSON encoder, skip invalid fields nested in an object
+		// instead of dropping the whole entry.
+		for _, nested := range field.AnyValue.([]Field) {
+			if !nested.valid() {
+				continue
+			}
+			if err := enc.writeField(key, &nested); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	enc.writeFieldKey(key)
 	enc.writeFieldValue(field)
@@ -158,11 +168,8 @@ func (enc *TextEncoder) writeFieldValue(field *Field) {
 	case DurationType:
 		enc.writeTextStringWithColor(time.Duration(field.IntValue).String(), enc.colors.attr.StringColor)
 	case ErrorType:
-		if field.AnyValue == nil {
-			enc.writeTextStringWithColor("<nil>", enc.colors.attr.StringColor)
-			return
-		}
-		enc.writeTextStringWithColor(field.AnyValue.(error).Error(), enc.colors.attr.StringColor)
+		err, _ := field.AnyValue.(error)
+		enc.writeTextString(errorText(err))
 	case ArrayType:
 		enc.writeAnyValue(field.AnyValue)
 	case NilType:
@@ -181,7 +188,7 @@ func (enc *TextEncoder) writeTimePrimitive(value time.Time) {
 	buf.Reset()
 	buf.AppendTime(value, enc.timeF.option.Layout)
 	valueString := string(buf.Bytes())
-	bufPool.Put(buf)
+	putBuffer(buf)
 	enc.writeTextStringWithColor(valueString, enc.colors.attr.StringColor)
 }
 
@@ -285,11 +292,7 @@ func (enc *TextEncoder) writeAnyValue(value any) {
 	case Field:
 		enc.writeTextString(enc.textFieldsString([]Field{v}))
 	case error:
-		if v == nil {
-			enc.writeTextString("<nil>")
-		} else {
-			enc.writeTextString(v.Error())
-		}
+		enc.writeTextString(errorText(v))
 	case time.Time:
 		enc.writeTimePrimitive(v)
 	case time.Duration:
@@ -333,11 +336,11 @@ func (enc *TextEncoder) textFieldsString(fields []Field) string {
 	nenc := enc.clone()
 	nenc.disableColor = true
 	defer func() {
-		bufPool.Put(nenc.buf)
+		putBuffer(nenc.buf)
 		putTextEncoder(nenc)
 	}()
 	for i := range fields {
-		if fields[i].Type == NoneType {
+		if !fields[i].valid() {
 			continue
 		}
 		_ = nenc.writeField("", &fields[i])

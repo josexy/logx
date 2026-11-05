@@ -5,12 +5,27 @@ import (
 	"time"
 )
 
+// maxPooledBufferSize caps the capacity of buffers returned to bufPool, so a
+// single very large entry does not pin its memory in the pool indefinitely.
+const maxPooledBufferSize = 64 << 10
+
 var bufPool = sync.Pool{
 	New: func() any { return NewBuffer(make([]byte, 0, 1024)) },
 }
 
+func putBuffer(buf *Buffer) {
+	if buf.Cap() > maxPooledBufferSize {
+		return
+	}
+	bufPool.Put(buf)
+}
+
 type LogContext struct {
-	level        *AtomicLevel
+	level *AtomicLevel
+	// levelShared reports that level was supplied by the caller
+	// (WithAtomicLevel) or handed out to it (AtomicLevel). Build shares such a
+	// level with the logger; otherwise the logger gets a snapshot of it.
+	levelShared  bool
 	levelF       levelField
 	timeF        timeField
 	callerF      callerField
@@ -41,9 +56,10 @@ func (lc *LogContext) copy(shareLevel bool) *LogContext {
 	newLogCtx := new(LogContext)
 	*newLogCtx = *lc
 	if shareLevel {
-		newLogCtx.level = lc.AtomicLevel()
+		newLogCtx.level = lc.atomicLevel()
 	} else {
-		newLogCtx.level = NewAtomicLevel(lc.AtomicLevel().Level())
+		newLogCtx.level = NewAtomicLevel(lc.atomicLevel().Level())
+		newLogCtx.levelShared = false
 	}
 	if len(lc.preFields) > 0 {
 		newLogCtx.preFields = make([]Field, 0, len(lc.preFields))
@@ -142,8 +158,12 @@ func (lc *LogContext) WithCallerKey(enable bool, option CallerOption) *LogContex
 	return lc
 }
 
-// WithEscapeQuote controls string escaping in the JSON fragments embedded in
-// Console output. The Json encoder always performs standards-compliant escaping.
+// WithEscapeQuote controls escaping in Console output: strings in the embedded
+// JSON fragment are JSON-escaped, and control characters in the message (such
+// as newlines and tabs) are escaped so a message cannot forge extra log lines
+// or columns. Console output is not escaped by default; prefer the Json or Text
+// encoder for untrusted input. The Json encoder always performs
+// standards-compliant escaping.
 func (lc *LogContext) WithEscapeQuote(enable bool) *LogContext {
 	lc.escapeQuote = enable
 	return lc
@@ -166,7 +186,7 @@ func (lc *LogContext) WithErrorHandler(handler ErrorHandler) *LogContext {
 }
 
 func (lc *LogContext) WithWriter(writer WriteSyncer) *LogContext {
-	lc.writer = writer
+	lc.writer = adaptFile(writer)
 	return lc
 }
 
@@ -184,30 +204,46 @@ func (lc *LogContext) WithEncoder(encoder EncoderType) *LogContext {
 	return lc
 }
 
+// WithLevel sets the minimum level. Loggers already built from this context
+// keep their level, unless the level is a shared AtomicLevel (see
+// WithAtomicLevel and AtomicLevel), in which case they observe the change.
 func (lc *LogContext) WithLevel(level LevelType) *LogContext {
-	lc.AtomicLevel().SetLevel(level)
+	lc.atomicLevel().SetLevel(level)
 	return lc
 }
 
+// WithAtomicLevel uses level as the minimum level. Loggers built from this
+// context share it, so level.SetLevel changes their level at runtime. A nil
+// level resets the context to its own, unshared level.
 func (lc *LogContext) WithAtomicLevel(level *AtomicLevel) *LogContext {
 	if level == nil {
-		level = NewAtomicLevel(LevelTrace)
+		lc.level, lc.levelShared = NewAtomicLevel(LevelTrace), false
+		return lc
 	}
-	lc.level = level
+	lc.level, lc.levelShared = level, true
 	return lc
 }
 
+// AtomicLevel returns the context's level. Because the caller can change the
+// returned level, it becomes shared with loggers built afterwards, as if it
+// had been passed to WithAtomicLevel.
 func (lc *LogContext) AtomicLevel() *AtomicLevel {
+	lc.levelShared = true
+	return lc.atomicLevel()
+}
+
+func (lc *LogContext) atomicLevel() *AtomicLevel {
 	if lc.level == nil {
 		lc.level = NewAtomicLevel(LevelTrace)
 	}
 	return lc.level
 }
 
-// Build returns a logger with a snapshot of the current configuration. The
-// configured AtomicLevel remains shared for runtime updates.
+// Build returns a logger with a snapshot of the current configuration,
+// including the level. Only a shared AtomicLevel (see WithAtomicLevel and
+// AtomicLevel) stays connected, for runtime updates.
 func (lc *LogContext) Build() Logger {
-	built := lc.copySharedLevel()
+	built := lc.copy(lc.levelShared)
 	if built.level == nil {
 		built.level = NewAtomicLevel(LevelTrace)
 	}

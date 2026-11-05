@@ -37,7 +37,11 @@ func (enc *ConsoleEncoder) Encode(ent entry, fields []Field) (ret *Buffer, err e
 		buf.AppendByte(ConsoleEncoderSplitCharacter)
 	}
 
-	buf.AppendString(ent.message)
+	if enc.escapeQuote {
+		buf.bs = appendEscapedControl(buf.bs, ent.message)
+	} else {
+		buf.AppendString(ent.message)
+	}
 
 	n1 := len(fields)
 	n2 := len(enc.preFields)
@@ -49,7 +53,7 @@ func (enc *ConsoleEncoder) Encode(ent entry, fields []Field) (ret *Buffer, err e
 	jsonEnc.writeBeginObject()
 	wrotePrefix, prefixErr := jsonEnc.writePrefixFields()
 	if prefixErr != nil {
-		bufPool.Put(buf)
+		putBuffer(buf)
 		return nil, prefixErr
 	}
 	if n1 == 0 {
@@ -62,7 +66,7 @@ func (enc *ConsoleEncoder) Encode(ent entry, fields []Field) (ret *Buffer, err e
 	}
 	for i := 0; i < n1; i++ {
 		if err = jsonEnc.writeField(&fields[i]); err != nil {
-			bufPool.Put(buf)
+			putBuffer(buf)
 			return
 		}
 		if i+1 != n1 {

@@ -40,6 +40,38 @@ func isDiscardWriteSyncer(ws WriteSyncer) bool {
 	}
 }
 
+// fileWriteSyncer adapts an *os.File. Only regular files can be fsynced: for
+// pipes, terminals and other special files Sync fails (EINVAL on Linux), which
+// would make every Sync, Fatal and Panic report a spurious error when logging
+// to stdout or stderr. For those files Sync is a no-op.
+type fileWriteSyncer struct {
+	file     *os.File
+	syncable bool
+}
+
+func (w fileWriteSyncer) Write(p []byte) (int, error) { return w.file.Write(p) }
+
+func (w fileWriteSyncer) Sync() error {
+	if !w.syncable {
+		return nil
+	}
+	return w.file.Sync()
+}
+
+// adaptFile wraps a bare *os.File in a fileWriteSyncer and returns any other
+// WriteSyncer unchanged.
+func adaptFile(ws WriteSyncer) WriteSyncer {
+	f, ok := ws.(*os.File)
+	if !ok || f == nil {
+		return ws
+	}
+	syncable := true
+	if fi, err := f.Stat(); err == nil {
+		syncable = fi.Mode().IsRegular()
+	}
+	return fileWriteSyncer{file: f, syncable: syncable}
+}
+
 func AddSync(w io.Writer) WriteSyncer {
 	if w == nil {
 		return nil
@@ -48,6 +80,8 @@ func AddSync(w io.Writer) WriteSyncer {
 		return discardWriteSyncer{}
 	}
 	switch w := w.(type) {
+	case *os.File:
+		return adaptFile(w)
 	case WriteSyncer:
 		return w
 	default:
@@ -81,6 +115,7 @@ func Lock(ws WriteSyncer) WriteSyncer {
 	if ws == nil {
 		return nil
 	}
+	ws = adaptFile(ws)
 	if isDiscardWriteSyncer(ws) {
 		return ws
 	}
@@ -118,7 +153,7 @@ func (l *LoggerX) Enabled(level LevelType) bool {
 	if l.logCtx.writer == nil || isDiscardWriteSyncer(l.logCtx.writer) || l.logCtx.enc == nil {
 		return false
 	}
-	return l.logCtx.AtomicLevel().Level() <= level
+	return l.logCtx.atomicLevel().Level() <= level
 }
 
 func (l *LoggerX) print(level LevelType, msg string, fields []Field) {
@@ -213,18 +248,14 @@ func (l *LoggerX) Panicf(format string, args ...any) {
 }
 
 func (l *LoggerX) ErrorWith(err error) {
-	value := "<nil>"
-	if err != nil {
-		value = err.Error()
-	}
-	l.print(LevelError, value, nil)
+	l.print(LevelError, errorText(err), nil)
 }
 
 func (l *LoggerX) PanicWith(err error) {
 	if err == nil {
 		return
 	}
-	l.terminal(LevelPanic, err.Error(), nil)
+	l.terminal(LevelPanic, errorText(err), nil)
 	panic(err)
 }
 
@@ -232,7 +263,7 @@ func (l *LoggerX) FatalWith(err error) {
 	if err == nil {
 		return
 	}
-	l.terminal(LevelFatal, err.Error(), nil)
+	l.terminal(LevelFatal, errorText(err), nil)
 	os.Exit(1)
 }
 
@@ -277,7 +308,7 @@ func (l *LoggerX) output(level LevelType, msg string, fields []Field) error {
 	if buf == nil {
 		return fmt.Errorf("encode log entry: encoder returned a nil buffer")
 	}
-	defer bufPool.Put(buf)
+	defer putBuffer(buf)
 	if buf.Len() > 0 && buf.Bytes()[buf.Len()-1] != '\n' {
 		buf.AppendByte('\n')
 	}

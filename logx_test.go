@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"math"
 	"net/netip"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -1339,6 +1340,273 @@ func TestAtomicLevelConcurrentSetLevelAndLog(t *testing.T) {
 
 	close(start)
 	wg.Wait()
+}
+
+type nilPtrError struct{ msg string }
+
+func (e *nilPtrError) Error() string { return e.msg }
+
+type panicError struct{}
+
+func (panicError) Error() string { panic("broken Error method") }
+
+// typedNilError returns a nil *nilPtrError as a non-nil error interface.
+func typedNilError() error {
+	var err *nilPtrError
+	return err
+}
+
+func TestEncodersHandleTypedNilAndPanickingErrors(t *testing.T) {
+	ent := entry{level: LevelInfo, time: time.Unix(0, 0), message: "msg"}
+	fields := []Field{
+		Error("err", typedNilError()),
+		Any("any", typedNilError()),
+		Error("broken", panicError{}),
+	}
+	const brokenMsg = "%!v(PANIC=Error method: broken Error method)"
+	tests := []struct {
+		encType EncoderType
+		want    string
+	}{
+		{Json, `{"msg":"msg","err":null,"any":null,"broken":"` + brokenMsg + `"}`},
+		{Console, "msg\t{\"err\":null,\"any\":null,\"broken\":\"" + brokenMsg + "\"}"},
+		{Text, `msg=msg err=<nil> any=<nil> broken="` + brokenMsg + `"`},
+	}
+	for _, tt := range tests {
+		t.Run(strconv.Itoa(int(tt.encType)), func(t *testing.T) {
+			if got := encodeForTest(t, NewLogContext(), tt.encType, ent, fields); got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestErrorWithAndPanicWithHandleTypedNilError(t *testing.T) {
+	var buffer bytes.Buffer
+	logger := NewLogContext().WithWriter(AddSync(&buffer)).WithEncoder(Text).Build()
+
+	logger.ErrorWith(typedNilError())
+	func() {
+		defer func() {
+			if r := recover(); r != typedNilError() {
+				t.Fatalf("PanicWith recovered %#v, want the typed-nil error", r)
+			}
+		}()
+		logger.PanicWith(typedNilError())
+	}()
+
+	if got, want := buffer.String(), "msg=<nil>\nmsg=<nil>\n"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestSyncIsNoopForNonRegularFiles(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+
+	for name, ws := range map[string]WriteSyncer{"AddSync": AddSync(w), "Lock": Lock(w)} {
+		if err := ws.Sync(); err != nil {
+			t.Fatalf("%s(pipe).Sync() error = %v, want nil", name, err)
+		}
+	}
+
+	var reported []error
+	logger := NewLogContext().
+		WithWriter(w).
+		WithErrorHandler(func(err error) { reported = append(reported, err) }).
+		WithEncoder(Json).
+		Build()
+	func() {
+		defer func() { _ = recover() }()
+		logger.Panic("through pipe")
+	}()
+	if err := logger.Sync(); err != nil {
+		t.Fatalf("logger.Sync() error = %v, want nil", err)
+	}
+	if len(reported) != 0 {
+		t.Fatalf("Panic reported errors for a pipe writer: %v", reported)
+	}
+
+	got := make([]byte, 64)
+	n, err := r.Read(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "{\"msg\":\"through pipe\"}\n"; string(got[:n]) != want {
+		t.Fatalf("pipe received %q, want %q", got[:n], want)
+	}
+}
+
+func TestSyncStillSyncsRegularFiles(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws := AddSync(f)
+	if err := ws.Sync(); err != nil {
+		t.Fatalf("Sync() on a regular file error = %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// A real fsync on a closed file fails, which shows Sync was not skipped.
+	if err := ws.Sync(); err == nil {
+		t.Fatal("Sync() on a closed regular file returned nil, want an error")
+	}
+}
+
+func TestBuildSnapshotsUnsharedLevel(t *testing.T) {
+	var debugBuffer, errorBuffer bytes.Buffer
+	ctx := NewLogContext().WithEncoder(Text)
+	debugLogger := ctx.WithLevel(LevelDebug).WithWriter(AddSync(&debugBuffer)).Build()
+	errorLogger := ctx.WithLevel(LevelError).WithWriter(AddSync(&errorBuffer)).Build()
+
+	debugLogger.Debug("debug visible")
+	debugLogger.With(String("scope", "child")).Debug("child visible")
+	errorLogger.Debug("debug hidden")
+	errorLogger.Error("error visible")
+
+	if got, want := debugBuffer.String(), "msg=\"debug visible\"\nmsg=\"child visible\" scope=child\n"; got != want {
+		t.Fatalf("reusing the builder changed an earlier logger's level: got %q, want %q", got, want)
+	}
+	if got, want := errorBuffer.String(), "msg=\"error visible\"\n"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestBuildSharesCallerVisibleLevel(t *testing.T) {
+	t.Run("WithAtomicLevel", func(t *testing.T) {
+		var buffer bytes.Buffer
+		level := NewAtomicLevel(LevelInfo)
+		logger := NewLogContext().
+			WithAtomicLevel(level).
+			WithLevel(LevelWarn).
+			WithWriter(AddSync(&buffer)).
+			WithEncoder(Text).
+			Build()
+		if got := level.Level(); got != LevelWarn {
+			t.Fatalf("WithLevel did not update the supplied AtomicLevel: got %v, want %v", got, LevelWarn)
+		}
+		level.SetLevel(LevelDebug)
+		logger.Debug("visible")
+		if got, want := buffer.String(), "msg=visible\n"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("AtomicLevel", func(t *testing.T) {
+		var buffer bytes.Buffer
+		ctx := NewLogContext().WithLevel(LevelWarn).WithWriter(AddSync(&buffer)).WithEncoder(Text)
+		level := ctx.AtomicLevel()
+		logger := ctx.Build()
+		level.SetLevel(LevelDebug)
+		logger.Debug("visible")
+		if got, want := buffer.String(), "msg=visible\n"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+}
+
+func TestEncodersSkipInvalidNestedFields(t *testing.T) {
+	ent := entry{level: LevelInfo, time: time.Unix(0, 0), message: "hello"}
+	fields := []Field{Object("user",
+		Int("id", 1),
+		Field{Key: "none"},
+		Field{Key: "obj", Type: ObjectType},
+		Bool("ok", true),
+	)}
+	tests := []struct {
+		encType EncoderType
+		want    string
+	}{
+		{Json, `{"msg":"hello","user":{"id":1,"ok":true}}`},
+		{Console, "hello\t{\"user\":{\"id\":1,\"ok\":true}}"},
+		{Text, "msg=hello user.id=1 user.ok=true"},
+	}
+	for _, tt := range tests {
+		t.Run(strconv.Itoa(int(tt.encType)), func(t *testing.T) {
+			if got := encodeForTest(t, NewLogContext(), tt.encType, ent, fields); got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEncodersRejectMalformedFields(t *testing.T) {
+	ent := entry{level: LevelInfo, time: time.Unix(0, 0), message: "msg"}
+	malformed := []Field{
+		{Key: "obj", Type: ObjectType},
+		{Key: "err", Type: ErrorType, AnyValue: "not an error"},
+		{Key: "time", Type: TimeType, AnyValue: "not a location"},
+		{Key: "nilLoc", Type: TimeType, AnyValue: (*time.Location)(nil)},
+		{Key: "full", Type: TimeFullType},
+		{Key: "unknown", Type: AnyType + 1},
+	}
+	for _, encType := range []EncoderType{Console, Json, Text} {
+		for _, field := range malformed {
+			t.Run(strconv.Itoa(int(encType))+"/"+field.Key, func(t *testing.T) {
+				ctx := NewLogContext().WithEncoder(encType)
+				ctx.enc.Init()
+
+				buf, err := ctx.enc.Encode(ent, []Field{field})
+				if !errors.Is(err, errInvalidFieldType) {
+					t.Fatalf("Encode() error = %v, want %v", err, errInvalidFieldType)
+				}
+				if buf != nil {
+					t.Fatalf("Encode() buffer = %v, want nil", buf)
+				}
+			})
+		}
+	}
+}
+
+func TestConsoleEscapeQuoteEscapesMessageControlCharacters(t *testing.T) {
+	ent := entry{level: LevelInfo, time: time.Unix(0, 0), message: "ok\n2026-01-01\tERROR\tforged \"q\" \\  "}
+
+	escaped := encodeForTest(t, NewLogContext().WithEscapeQuote(true), Console, ent, nil)
+	if want := `ok\n2026-01-01\tERROR\tforged "q" \ \u2028`; escaped != want {
+		t.Fatalf("escaped message = %q, want %q", escaped, want)
+	}
+
+	raw := encodeForTest(t, NewLogContext(), Console, ent, nil)
+	if raw != ent.message {
+		t.Fatalf("message without WithEscapeQuote = %q, want it unchanged %q", raw, ent.message)
+	}
+}
+
+func TestConsoleCallerIncludesFunctionName(t *testing.T) {
+	var buffer bytes.Buffer
+	logger := NewLogContext().
+		WithCallerKey(true, CallerOption{Formatter: ShortFileFunc}).
+		WithWriter(AddSync(&buffer)).
+		WithEncoder(Console).
+		Build()
+
+	_, _, line, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	logger.Info("caller")
+
+	want := fmt.Sprintf("logx/logx_test.go:%d logx.TestConsoleCallerIncludesFunctionName\tcaller\n", line+4)
+	if got := buffer.String(); got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestBufferStringReturnsCopy(t *testing.T) {
+	buf := NewBuffer(make([]byte, 0, 16))
+	buf.AppendString("first")
+	s := buf.String()
+	buf.Reset()
+	buf.AppendString("other")
+	if s != "first" {
+		t.Fatalf("String() result changed after the buffer was reused: %q", s)
+	}
 }
 
 type nullWriter struct{}
