@@ -77,6 +77,11 @@ logger.Trace("trace message", logx.String("quoted", `"value"`), logx.Int("attemp
 logger.Error("error message", logx.Error("err", io.EOF))
 ```
 
+Console output is not escaped by default. `WithEscapeQuote(true)` JSON-escapes the
+strings in the field fragment and escapes control characters such as newlines and
+tabs in the message, so a message cannot forge extra log lines. Prefer the JSON or
+text encoder for untrusted input.
+
 ## Dynamic Level
 
 Use `AtomicLevel` when you need to update the minimum log level at runtime without rebuilding existing loggers.
@@ -178,7 +183,10 @@ colors are automatically disabled for JSON output, even if color is enabled on
 the context.
 
 Call `Sync` during a normal shutdown when the writer buffers data. Fatal and
-panic entries are synced automatically before their terminal action runs.
+panic entries are synced automatically before their terminal action runs. For
+`*os.File` writers, only regular files are fsynced: `Sync` is a no-op for pipes
+and terminals, so logging to stdout or stderr does not report spurious sync
+errors.
 
 ```go
 logger := logx.NewLogContext().
@@ -198,7 +206,13 @@ defer func() {
 
 Without a custom error handler, encoding, writing, short-write, and automatic
 sync errors are reported to standard error. `Build` snapshots the logger
-configuration; use the shared `AtomicLevel` for runtime level changes.
+configuration, including a level set with `WithLevel`, so reusing a context to
+build another logger does not affect loggers built earlier. Only an
+`AtomicLevel` passed to `WithAtomicLevel` (or obtained from `AtomicLevel()`)
+stays shared, for runtime level changes.
+
+Logging a nil pointer stored in an `error` (a "typed nil") writes `null` (JSON)
+or `<nil>` (console, text) instead of crashing.
 
 Compatibility note: the exported `Logger` interface now includes `Enabled` and
 `Sync`. Custom logger implementations, adapters, and mocks must implement both

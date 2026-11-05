@@ -20,8 +20,14 @@ type Logger interface {
 	Errorf(format string, args ...any)
 	Panicf(format string, args ...any)
 	Fatalf(format string, args ...any)
+	// PanicWith logs err's message at panic level, then panics with err.
+	// It does nothing when err is nil.
 	PanicWith(err error)
+	// ErrorWith logs err's message at error level. A nil err is logged as
+	// "<nil>".
 	ErrorWith(err error)
+	// FatalWith logs err's message at fatal level, then calls os.Exit(1).
+	// It does nothing, and does not exit, when err is nil.
 	FatalWith(err error)
 	With(fields ...Field) Logger
 	Sync() error

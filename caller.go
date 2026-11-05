@@ -85,11 +85,20 @@ func (c *callerField) value() (fileName, funcName string) {
 	return
 }
 
+// AppendPrimitive appends the caller as "file:line", followed by " func" for
+// the ShortFileFunc and FullFileFunc formatters.
 func (c *callerField) AppendPrimitive(buf *Buffer) {
-	fileName, _ := c.value()
+	fileName, funcName := c.value()
+	appendCaller := func(buf *Buffer) {
+		buf.AppendString(fileName)
+		if funcName != "" {
+			buf.AppendByte(' ')
+			buf.AppendString(funcName)
+		}
+	}
 	if c.color {
-		appendColor(buf, YellowAttr, fileName)
+		appendColorWithFunc(buf, YellowAttr, appendCaller)
 		return
 	}
-	buf.AppendString(fileName)
+	appendCaller(buf)
 }

@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strconv"
 	"time"
-	"unsafe"
 )
 
 // Buffer is a thin wrapper around a byte slice. It's intended to be pooled, so
@@ -77,12 +76,8 @@ func (b *Buffer) Cap() int { return cap(b.bs) }
 // Bytes returns a mutable reference to the underlying byte slice.
 func (b *Buffer) Bytes() []byte { return b.bs }
 
-func (b *Buffer) String() string {
-	if len(b.bs) == 0 {
-		return ""
-	}
-	return unsafe.String(&b.bs[0], len(b.bs))
-}
+// String returns a copy of the buffer's contents as a string.
+func (b *Buffer) String() string { return string(b.bs) }
 
 func (b *Buffer) Clone() *Buffer { return &Buffer{bs: slices.Clone(b.bs)} }
 

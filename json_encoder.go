@@ -50,7 +50,7 @@ func (enc *JsonEncoder) Encode(ent entry, fields []Field) (ret *Buffer, err erro
 	nenc.writePromptFields(&ent)
 	wrotePrefix, prefixErr := nenc.writePrefixFields()
 	if prefixErr != nil {
-		bufPool.Put(nenc.buf)
+		putBuffer(nenc.buf)
 		return nil, prefixErr
 	}
 	if wrotePrefix {
@@ -68,7 +68,7 @@ func (enc *JsonEncoder) Encode(ent entry, fields []Field) (ret *Buffer, err erro
 
 	for i := 0; i < n; i++ {
 		if err = nenc.writeField(&fields[i]); err != nil {
-			bufPool.Put(nenc.buf)
+			putBuffer(nenc.buf)
 			return
 		}
 		if i+1 != n {
@@ -178,11 +178,8 @@ func (enc *JsonEncoder) writeFieldValue(field *Field) {
 	case DurationType:
 		enc.writeFieldDuration(time.Duration(field.IntValue))
 	case ErrorType:
-		if field.AnyValue == nil {
-			enc.writeFieldNil()
-			return
-		}
-		enc.writeFieldError(field.AnyValue.(error))
+		err, _ := field.AnyValue.(error)
+		enc.writeFieldError(err)
 	case ObjectType:
 		enc.writeFieldObject(field.AnyValue.([]Field))
 	case ArrayType:
@@ -195,7 +192,7 @@ func (enc *JsonEncoder) writeFieldValue(field *Field) {
 }
 
 func (enc *JsonEncoder) writeField(field *Field) error {
-	if field.Type == NoneType {
+	if !field.valid() {
 		return errInvalidFieldType
 	}
 	enc.writeFieldKey(field.Key)
@@ -316,11 +313,12 @@ func (enc *JsonEncoder) writeFieldDuration(value time.Duration) {
 }
 
 func (enc *JsonEncoder) writeFieldError(value error) {
-	if value == nil {
+	msg, isNil := errorMessage(value)
+	if isNil {
 		enc.writeFieldNil()
-	} else {
-		enc.writeFieldString(value.Error())
+		return
 	}
+	enc.writeFieldString(msg)
 }
 
 func (enc *JsonEncoder) writeMapObjectForAnyValue(value map[string]any) {
@@ -375,7 +373,7 @@ func (enc *JsonEncoder) writeFieldObject(value []Field) {
 	enc.writeBeginObject()
 	wroteField := false
 	for i := range value {
-		if value[i].Type == NoneType {
+		if !value[i].valid() {
 			continue
 		}
 		if wroteField {
@@ -389,7 +387,7 @@ func (enc *JsonEncoder) writeFieldObject(value []Field) {
 
 func (enc *JsonEncoder) writeFieldSingleObject(value Field) {
 	enc.writeBeginObject()
-	if value.Type != NoneType {
+	if value.valid() {
 		_ = enc.writeField(&value)
 	}
 	enc.writeEndObject()

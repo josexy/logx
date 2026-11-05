@@ -2,7 +2,9 @@ package logx
 
 import (
 	"errors"
+	"fmt"
 	"math"
+	"reflect"
 	"time"
 )
 
@@ -140,4 +142,63 @@ func ArrayT[T any](key string, value ...T) Field {
 
 func Any(key string, value any) Field {
 	return Field{Key: key, Type: AnyType, AnyValue: value}
+}
+
+// valid reports whether f can be encoded: its type is known and AnyValue holds
+// what that type requires. Fields made by the constructors in this file are
+// always valid; hand-built Fields may not be, and encoding them must not panic.
+func (f *Field) valid() bool {
+	switch f.Type {
+	case NoneType:
+		return false
+	case TimeType:
+		if f.AnyValue == nil {
+			return true
+		}
+		loc, ok := f.AnyValue.(*time.Location)
+		return ok && loc != nil
+	case TimeFullType:
+		_, ok := f.AnyValue.(time.Time)
+		return ok
+	case ErrorType:
+		if f.AnyValue == nil {
+			return true
+		}
+		_, ok := f.AnyValue.(error)
+		return ok
+	case ObjectType:
+		_, ok := f.AnyValue.([]Field)
+		return ok
+	default:
+		return f.Type <= AnyType
+	}
+}
+
+// errorMessage calls err.Error() without letting it crash the caller. It
+// reports isNil for a nil error and for a typed-nil pointer whose Error method
+// panics (for example a nil *MyErr returned as error). Any other panic raised
+// by Error is rendered into the message, the way fmt reports such panics.
+func errorMessage(err error) (msg string, isNil bool) {
+	if err == nil {
+		return "", true
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			if v := reflect.ValueOf(err); v.Kind() == reflect.Pointer && v.IsNil() {
+				msg, isNil = "", true
+				return
+			}
+			msg, isNil = fmt.Sprintf("%%!v(PANIC=Error method: %v)", r), false
+		}
+	}()
+	return err.Error(), false
+}
+
+// errorText is errorMessage with nil errors rendered as "<nil>".
+func errorText(err error) string {
+	msg, isNil := errorMessage(err)
+	if isNil {
+		return "<nil>"
+	}
+	return msg
 }
